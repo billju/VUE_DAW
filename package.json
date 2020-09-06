@@ -1,0 +1,25 @@
+{
+  "name": "vue_daw",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "parcel src/index.pug"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^5.14.0",
+    "app.vue": "^0.1.10",
+    "bootstrap": "^4.5.2",
+    "tone": "^14.7.39",
+    "vue": "^2.6.12",
+    "vue-hot-reload-api": "^2.3.4"
+  },
+  "devDependencies": {
+    "@vue/component-compiler-utils": "^3.2.0",
+    "pug": "^3.0.0",
+    "vue-template-compiler": "^2.6.12"
+  }
+}

@@ -13,15 +13,20 @@ export default {
         events: {}
     }),
     props:{
-        
-        },
+        a:{type:Number,default:200},
+        aq:{type:Number,default:1},
+        d:{type:Number,default:100},
+        dq:{type:Number,default:1},
+        s:{type:Number,default:200},
+        r:{type:Number,default:30},
+        rq:{type:Number,default:1},
+    },
     methods:{
         
-        },
+    },
     computed:{
         path(){
-            let k = this.knobs
-            let [a,aq,d,dq,s,r,rq] = [k.a.val*200,k.aq.val,k.d.val*100,k.dq.val,k.s.val*200,k.r.val*30,k.rq.val]
+            let {a,aq,d,dq,s,r,rq} = this.$props
             return `M0 0 
                     Q${a*aq} ${100-100*aq}, ${a} 100 
                     Q${a+s*dq} ${d+(100-d)*dq}, ${a+s} ${d} 

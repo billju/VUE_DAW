@@ -1,25 +1,24 @@
 <template lang="pug">
-.position-relative.d-flex.flex-wrap.justify-content-center(ref='osc')
+.d-flex.flex-wrap.justify-content-center
     svg.d-none
-        linearGradient#gradient(y1='1' y2='0')
-        stop(offset='0%' stop-color='#447799')
-        stop(offset='100%' stop-color='#112266')
-    svg.waveform(ref='sine' viewBox='0 0 100 100' @click='type=\'sine\'')
-        path(d='M20 50 Q35 0,50 50 Q65 100,80 50' fill='url(#gradient)' :stroke='primary')
-    svg.waveform(ref='square' viewBox='0 0 100 100' @click='type=\'square\'')
-        polyline(points='20,70 20,30 50,30 50,70 80,70 80,30' fill='url(#gradient)' :stroke='primary')
-    svg.waveform(ref='pulse' viewBox='0 0 100 100' @click='type=\'pulse\'')
-        polyline(points='20,60 35,30 50,30 50,70 80,70 80,30' fill='url(#gradient)' :stroke='primary')
-    svg.waveform(ref='triangle' viewBox='0 0 100 100' @click='type=\'triangle\'')
-        polyline(points='20,50 35,30 65,70 80,50' fill='url(#gradient)' :stroke='primary')
-    svg.waveform(ref='sawtooth' viewBox='0 0 100 100' @click='type=\'sawtooth\'')
-        polyline(points='20,65 50,30 50,70 80,35' fill='url(#gradient)' :stroke='primary')
-    svg.waveform(ref='random' viewBox='0 0 100 100' @click='type=\'random\'')
-        rect(x='25' y='25' rx='10' ry='10' width='50' height='50' :fill='primary')
-        circle(cx='60' cy='40' r='4' :fill='dark')
-        circle(cx='50' cy='50' r='4' :fill='dark')
-        circle(cx='40' cy='60' r='4' :fill='dark')
-    div(:style='markerStyle')
+        linearGradient#gradient(y1="1" y2="0")
+        stop(offset="0%" stop-color="#447799")
+        stop(offset="100%" stop-color="#112266")
+    svg.waveform(ref="sine" viewBox="0 0 100 100" @click="type='sine'")
+        path(d="M20 50 Q35 0,50 50 Q65 100,80 50" fill="url(#gradient)" :stroke="primary")
+    svg.waveform(ref="square" viewBox="0 0 100 100" @click="type='square'")
+        polyline(points="20,70 20,30 50,30 50,70 80,70 80,30" fill="url(#gradient)" :stroke="primary")
+    svg.waveform(ref="pulse" viewBox="0 0 100 100" @click="type='pulse'")
+        polyline(points="20,60 35,30 50,30 50,70 80,70 80,30" fill="url(#gradient)" :stroke="primary")
+    svg.waveform(ref="triangle" viewBox="0 0 100 100" @click="type='triangle'")
+        polyline(points="20,50 35,30 65,70 80,50" fill="url(#gradient)" :stroke="primary")
+    svg.waveform(ref="sawtooth" viewBox="0 0 100 100" @click="type='sawtooth'")
+        polyline(points="20,65 50,30 50,70 80,35" fill="url(#gradient)" :stroke="primary")
+    svg.waveform(ref="random" viewBox="0 0 100 100" @click="type='random'")
+        rect(x="25" y="25" rx="10" ry="10" width="50" height="50" :fill="primary")
+        circle(cx="60" cy="40" r="4" :fill="dark")
+        circle(cx="50" cy="50" r="4" :fill="dark")
+        circle(cx="40" cy="60" r="4" :fill="dark")
 </template>
 
 <script>
@@ -97,18 +96,7 @@ export default {
         },
     },
     computed:{
-        markerStyle(){
-            let child = this.$refs[this.type].getBoundingClientRect(),
-            parent = this.$refs['osc'].getBoundingClientRect()
-            return {
-                padding: '45px',
-                border: '5px solid white',
-                position: 'absolute',
-                top: `${child.y-parent.y}px`,
-                left: `${child.x-parent.x}px`,
-                transition: '0.5s'
-            }
-        },
+        
     },
     mounted(){
         this.events = {
@@ -123,3 +111,10 @@ export default {
     },
 }
 </script>
+
+<style scoped>
+svg{
+    width: 100px;
+    height: 100%;
+}
+</style>

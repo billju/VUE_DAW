@@ -2,21 +2,23 @@
 div(style="width:fit-content;max-width:100%;user-select:none")
     select(v-model="chordType")
         option(v-for="val,name in chords" :key="name" :value="name") {{name}}
+    .btn.btn-outline-success(@click="play()")
+        i.fa.fa-play
+    .btn.btn-outline-danger(@click="stop()")
+        i.fa.fa-stop
     .d-flex.bg-dark
         .flex-grow-0(style="flex-shrink:0" :style="{flexBasis:pianoGrids[0].style.width}")
         .hide-scrollbar.position-relative.text-light(ref="ticks" style="overflow-x:scroll")
             .d-inline-flex.pr-3(@wheel="scaleX($event)")
                 .h-100(v-for="tick,ti in ticks" :key="ti" :style="tick.style") {{tick.content}}
             i.position-absolute.text-warning.fa.fa-chevron-down(style="bottom:0;left:-6px" :style="cursorStyle")
-    .d-flex(style='overflow-y:scroll;max-height:600px')
+    .d-flex(style='overflow-y:scroll;max-height:800px' @contextmenu.prevent="")
         .h-100(@wheel="scaleY($event)")
-            .text-dark(v-for='pG,pi in pianoGrids' :key='pi' :style='pG.style' 
-                :class="pG.class" @mousedown="triggerAttack({f:grid2freq(pi),v:10})") {{pG.content}}
-        .hide-scrollbar.position-relative.h-100(ref='grid' style='overflow-x:scroll' 
-            @mousedown='handleStart($event)' @contextmenu.prevent="")
+            .text-dark(v-for='pG,pi in pianoGrids' :key='pi' :style='pG.style' :class="pG.class" @mousedown="handlePianoStart(pi)") {{pG.content}}
+        .hide-scrollbar.position-relative.h-100(ref='grid' style='overflow-x:scroll' @mousedown='handleStart($event)' )
             div(:style='gridStyle')
             transition-group(name="fade")
-                .text-center(v-for='note,ni in notes' :key='ni' :style='noteStyle(note)')
+                .text-center(v-for='note in notes' :key='note.i' :style='noteStyle(note)')
                     small.position-absolute.w-100(style="left:0;top:0" :style="{lineHeight:grid.H-2+'px'}") {{grid2note(note.y)}}
                     .position-absolute.px-1.h-100(style="left:0;top:0;cursor:ew-resize" 
                         @mousedown="resizeStart('left',note)")
@@ -34,20 +36,20 @@ div(style="width:fit-content;max-width:100%;user-select:none")
 </template>
 
 <script>
-import * as Tone from 'tone'
 import RangeSlider from './range-slider'
 
 export default {
     name: 'piano-roll',
     components: {RangeSlider},
     data:()=>({
-        grid: {W:20,H:15,octave:7,measure:32}, velo:50,
+        grid: {W:20,H:15,octave:8,measure:80}, velo:50,
         // width height  八度 小節
         notes: [
             // {a:false,x:0,y:0,l:1,f,v,d},
             // active grid-x grid-y length frequency velocity delay
         ],
-        lastNote: {a:false,x:0,y:0,l:1,f:440,v:80},
+        lastNote: {a:false,x:0,y:0,l:1,f:440,v:30},
+        vPianoNotes: [],
         chordType: 'major',
         chords: {
             mono: [0],
@@ -58,17 +60,17 @@ export default {
             major7: [0,4,7,11],
             minor7: [0,3,7,10],
         },
-        activeNotes: [], clipboard: [], bpm:128,
+        activeNotes: [], clipboard: [],
         resizing: false, 
         moving: false, lastMove:{x:0,y:0},
         ranging: false, range: {sx:0,sy:0,ex:0,ey:0},
         deleting: false, ctrlKey: false, shiftKey: false,
         events: {},
-        sampler: {},
         triggering: [], playX: -1, timeout: null,
     }),
     props:{
-        
+        bpm: {type:Number,default:128},
+        sampler: {type:Object,default:()=>({})}
     },
     methods:{
         minmax(input,min,max){return input>max?max:input<min?min:input},
@@ -94,10 +96,11 @@ export default {
             this.playX++
             let {measure} = this.grid
             for(let note of this.notes){
-                if(note.x==this.playX)
-                    this.triggerAttack(note)
-                if(note.x+note.l==this.playX-1)
-                    this.triggerRelease(note)
+                if(note.x==this.playX){
+                    this.triggerAttackRelease(note)
+                    this.triggering.push(note)
+                }else if(note.x+note.l==this.playX-1)
+                    this.triggering =  this.triggering.filter(n=>n!=note)
             }
             clearTimeout(this.timeout)
             if(this.playX>this.endX){ 
@@ -146,15 +149,42 @@ export default {
             this.sampler[v].triggerRelease(note.f)
             this.triggering =  this.triggering.filter(n=>n!=note)
         },
-        triggerSelection(){
+        triggerAttackRelease(note){
+            let v = this.stepVelocity(note.v)
+            let duration = note.l*this.beatMs/1000
+            this.sampler[v].triggerAttackRelease(note.f,duration)
+        },
+        triggerSelection(shouldRelease=true){
             for(let note of this.activeNotes.slice(0,4)){
                 note.f = this.grid2freq(note.y)
-                this.triggerAttack(note)
+                if(shouldRelease)
+                    this.triggerAttackRelease(note)
+                else
+                    this.triggerAttack(note)
             }
         },
         clearSelection(){
             this.activeNotes.map(n=>{n.a=false})
             this.activeNotes = []
+        },
+        generateID(){
+            return '_' + Math.random().toString(36).substr(2, 9)
+        },
+        handlePianoStart(y){
+            this.activeNotes.map(n=>{n.a=false})
+            this.activeNotes = []
+            for(let oy of this.chords[this.chordType]){
+                let newNote = {
+                    i:this.generateID(),
+                    a:true, x:-1,
+                    y: y - oy,
+                    l:this.lastNote.l,
+                    f:this.grid2freq(y-oy),
+                    v:this.lastNote.v,
+                }
+                this.activeNotes.push(newNote)
+            }
+            this.triggerSelection(false)
         },
         handleStart(e){
             let grid = this.getGrid(e.clientX,e.clientY)
@@ -177,12 +207,13 @@ export default {
                         notes[0].a = true
                         this.activeNotes = [notes[0]]
                     }
-                    this.triggerSelection()
+                    this.triggerSelection(false)
                 }else{
                     this.activeNotes.map(n=>{n.a=false})
                     this.activeNotes = []
                     for(let oy of this.chords[this.chordType]){
                         let newNote = {
+                            i:this.generateID(),
                             a:true, x,
                             y: y - oy,
                             l:this.lastNote.l,
@@ -193,7 +224,7 @@ export default {
                         this.notes.push(newNote)
                         this.activeNotes.push(newNote)
                     }
-                    this.triggerSelection()
+                    this.triggerSelection(false)
                 }
             }else if(e.button==2){
                 this.clearSelection()
@@ -234,8 +265,10 @@ export default {
                     for(let note of this.activeNotes){
                         note.x += dx
                         note.y += dy
-                        if(dy!=0)
+                        if(dy!=0){
+                            this.triggerRelease(note)
                             note.f = this.grid2freq(note.y)
+                        }
                     }
                 }
             }else if(this.deleting){
@@ -262,13 +295,15 @@ export default {
                 this.lastNote = {...this.activeNotes[0]}
                 this.moving = false
                 this.activeNotes.map(n=>{
+                    this.triggerRelease(n)
                     n.f = this.grid2freq(n.y)
                 })
                 // this.notes.sort((a,b)=>a.x-b.x)
+            }else{
+                for(let note of this.triggering)
+                    this.triggerRelease(note)
             }
             this.deleting = false
-            for(let note of this.triggering)
-                this.triggerRelease(note)
         },
         copyNotes(){
             this.clipboard = JSON.parse(JSON.stringify(this.activeNotes))
@@ -297,6 +332,12 @@ export default {
                     e.preventDefault()
                     if(this.playX>-1) this.stop()
                     else this.play()
+                    break
+                case 'A':
+                    if(e.ctrlKey){
+                        this.activeNotes = this.notes
+                        this.activeNotes.map(n=>{n.a=true})
+                    }
                     break
                 case 'X':
                     if(e.ctrlKey){
@@ -381,7 +422,8 @@ export default {
                 left: note.x*W+'px',
                 height: H-2+'px',
                 width: note.l*W-2+'px',
-                background: note.a?'#FFA3A4':'#C4FACF'
+                background: note.a?'#FFA3A4':'#C4FACF',
+                opacity: note.v/128+0.5,
             }
         },
     },
@@ -423,6 +465,8 @@ export default {
         },
         cursorStyle(){
             let x = (this.playX+0.5)*this.grid.W
+            // if(this.$refs['grid'])
+            //     this.$refs['grid'].scrollLeft = x
             let duration = this.playX<0?0:this.beatMs
             return {
                 transform: `translateX(${x}px)`,
@@ -497,26 +541,7 @@ export default {
         // this.synth = new Tone.PolySynth(Tone.Synth,{
         //     oscillator:{type:'square8'}
         // }).toDestination()
-        
-        // A0v1~A7v16, C1v1~C8v16 Ds1v7~Ds7v16 Fs1v1~Fs7v16
-        const octs = {A:[0,7],C:[1,8],Ds:[1,7],Fs:[1,7]}
-        const createSampler = (velocity)=>{
-            let entries = Object.keys(octs).flatMap(note=>{
-                let [min,max] = octs[note]
-                return Array.from(Array(max-min+1).keys(),i=>{
-                    let key = `${note}${min+i}v${velocity}`
-                    return [key.replace('s','#'),`${key}.mp3`]
-                })
-            })
-            return new Tone.Sampler({
-                urls: Object.fromEntries(entries),
-                baseUrl: 'http://localhost:5500/sounds/piano-samples/',
-                onload: ()=>{},
-            }).toDestination()
-        }
-        this.sampler = {}
-        for(let velocity of [5,10,15])
-            this.sampler[velocity] = createSampler(velocity)
+
         // 互相綁定捲動事件
         let scrollBundles = ['grid','ticks','velocities']
         for(let ref of scrollBundles){

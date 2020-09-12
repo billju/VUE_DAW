@@ -1,12 +1,13 @@
 <template lang="pug">
 .position-relative(:style='{minWidth}')
-    .d-inline-block(v-for='(pk,pi) in pianoKeys' :key='pi' :style='pianoKeyStyle(pk)' @mousedown='handleKeydown(pk)' @mouseup='handleKeyup(pk)' @mouseleave='handleKeyup(pk)' @touchstart='handleKeydown(pk)' @touchend='handleKeyup(pk)' @touchcancel='handleKeyup(pk)')
+    .d-inline-block(v-for='(pk,pi) in pianoKeys' :key='pi' :style='pianoKeyStyle(pk)' 
+        @mouseenter='handleEnter(pk)' @mouseleave='handleLeave(pk)')
         div(:style='charStyle(pk)') {{pk.char}}
 </template>
 <script>
 export default {
     data:()=>({
-        events: {}
+        events: {}, mouse:{active:false,pianoKey:null},
     }),
     props:{
         pianoKeys: {
@@ -49,7 +50,7 @@ export default {
     },
     methods:{
         getFreq(pianoKey){
-            return Math.pow(2, pianoKey.pitch/12).toFixed(2)*1
+            return Math.round(440*Math.pow(2, pianoKey.pitch/12))
         },
         getPianoKey(keyChar){
             keyChar = keyChar.toUpperCase()
@@ -57,18 +58,39 @@ export default {
             if(idx===-1) return null
             return this.pianoKeys[idx]
         },
+        handleEnter(pianoKey){
+            this.mouse.pianoKey = pianoKey
+            if(this.mouse.active)
+                this.handleKeydown(pianoKey)
+        },
+        handleLeave(pianoKey){
+            this.mouse.pianoKey=null
+            this.handleKeyup(pianoKey)
+        },
+        handleMousedown(e){
+            this.mouse.active = true
+            if(this.mouse.pianoKey)
+                this.handleKeydown(this.mouse.pianoKey)
+        },
+        handleMouseup(e){
+            this.mouse.active = false
+            if(this.mouse.pianoKey)
+                this.handleKeyup(this.mouse.pianoKey)
+        },
         handleKeydown(pianoKey){
             if(!pianoKey) return
-            let freq = this.getFreq(pianoKey)
+            let f = this.getFreq(pianoKey)
+            if(!pianoKey.press)
+                this.$emit('triggerAttack',{f,v:60})
             pianoKey.press = true
-            this.$emit('keydown',{freq})
         },
         handleKeyup(pianoKey){
             if(!pianoKey) return
             if(!pianoKey.press) return
+            let f = this.getFreq(pianoKey)
+            if(pianoKey.press)
+                this.$emit('triggerRelease',{f,v:60})
             pianoKey.press = false
-            let freq = this.getFreq(pianoKey)
-            this.$emit('keyup',{freq})
         },
         pianoKeyStyle(pianoKey){
             let common = {
@@ -113,7 +135,10 @@ export default {
     mounted(){
         this.events = {
             keydown: e=>this.handleKeydown(this.getPianoKey(e.key)),
-            keyup: e=>this.handleKeyup(this.getPianoKey(e.key))
+            keyup: e=>this.handleKeyup(this.getPianoKey(e.key)),
+            mousedown: e=>this.handleMousedown(e),
+            mouseup: e=>this.handleMouseup(e),
+            mouseleave: e=>this.handleMouseup(e),
         }
         for(let name in this.events)
             window.addEventListener(name,this.events[name])

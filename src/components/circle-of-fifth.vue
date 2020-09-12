@@ -1,7 +1,10 @@
-Vue.component('',{
-    template:`
+<template lang="pug">
+    
+</template>
 
-    `,
+<script>
+export default {
+    name: '',
     data:()=>({
         events: {}
     }),
@@ -25,4 +28,5 @@ Vue.component('',{
         for(let name in this.events)
             window.removeEventListener(name,this.events[name])
     },
-})
+}
+</script>

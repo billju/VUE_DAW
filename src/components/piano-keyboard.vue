@@ -1,8 +1,9 @@
 <template lang="pug">
-.position-relative(:style='{minWidth}')
-    .d-inline-block(v-for='(pk,pi) in pianoKeys' :key='pi' :style='pianoKeyStyle(pk)' 
-        @mouseenter='handleEnter(pk)' @mouseleave='handleLeave(pk)')
-        div(:style='charStyle(pk)') {{pk.char}}
+.table-responsive
+    .position-relative(:style='{minWidth}')
+        .d-inline-block(v-for='(pk,pi) in pianoKeys' :key='pi' :style='pianoKeyStyle(pk)' 
+            @mouseenter='handleEnter(pk)' @mouseleave='handleLeave(pk)')
+            div(:style='charStyle(pk)') {{pk.char}}
 </template>
 <script>
 export default {
@@ -13,44 +14,50 @@ export default {
         pianoKeys: {
             type: Array,
             default: () => ([
-                {char: 'Z', pitch: -9, black:false, press:false},
-                {char: 'S', pitch: -8, black:true, press:false},
-                {char: 'X', pitch: -7, black:false, press:false},
-                {char: 'D', pitch: -6, black:true, press:false},
-                {char: 'C', pitch: -5, black:false, press:false},
-                {char: 'V', pitch: -4, black:false, press:false},
-                {char: 'G', pitch: -3, black:true, press:false},
-                {char: 'B', pitch: -2, black:false, press:false},
-                {char: 'H', pitch: -1, black:true, press:false},
-                {char: 'N', pitch: 0, black:false, press:false},
-                {char: 'J', pitch: 1, black:true, press:false},
-                {char: 'M', pitch: 2, black:false, press:false},
-                {char: 'Q', pitch: 3, black:false, press:false},
-                {char: '2', pitch: 4, black:true, press:false},
-                {char: 'W', pitch: 5, black:false, press:false},
-                {char: '3', pitch: 6, black:true, press:false},
-                {char: 'E', pitch: 7, black:false, press:false},
-                {char: 'R', pitch: 8, black:false, press:false},
-                {char: '5', pitch: 9, black:true, press:false},
-                {char: 'T', pitch: 10, black:false, press:false},
-                {char: '6', pitch: 11, black:true, press:false},
-                {char: 'Y', pitch: 12, black:false, press:false},
-                {char: '7', pitch: 13, black:true, press:false},
-                {char: 'U', pitch: 14, black:false, press:false},
-                {char: 'I', pitch: 15, black:false, press:false},
-                {char: '9', pitch: 16, black:true, press:false},
-                {char: 'O', pitch: 17, black:false, press:false},
-                {char: '0', pitch: 18, black:true, press:false},
-                {char: 'P', pitch: 19, black:false, press:false},
-                {char: '[', pitch: 20, black:false, press:false},
-                {char: '=', pitch: 21, black:true, press:false},
-                {char: ']', pitch: 22, black:false, press:false},
+                {char: 'Z', midi: 36, black:false, press:false},
+                {char: 'S', midi: 37, black:true, press:false},
+                {char: 'X', midi: 38, black:false, press:false},
+                {char: 'D', midi: 39, black:true, press:false},
+                {char: 'C', midi: 40, black:false, press:false},
+                {char: 'V', midi: 41, black:false, press:false},
+                {char: 'G', midi: 42, black:true, press:false},
+                {char: 'B', midi: 43, black:false, press:false},
+                {char: 'H', midi: 44, black:true, press:false},
+                {char: 'N', midi: 45, black:false, press:false},
+                {char: 'J', midi: 46, black:true, press:false},
+                {char: 'M', midi: 47, black:false, press:false},
+                {char: 'Q', midi: 48, black:false, press:false},
+                {char: '2', midi: 49, black:true, press:false},
+                {char: 'W', midi: 50, black:false, press:false},
+                {char: '3', midi: 51, black:true, press:false},
+                {char: 'E', midi: 52, black:false, press:false},
+                {char: 'R', midi: 53, black:false, press:false},
+                {char: '5', midi: 54, black:true, press:false},
+                {char: 'T', midi: 55, black:false, press:false},
+                {char: '6', midi: 56, black:true, press:false},
+                {char: 'Y', midi: 57, black:false, press:false},
+                {char: '7', midi: 58, black:true, press:false},
+                {char: 'U', midi: 59, black:false, press:false},
+                {char: 'I', midi: 60, black:false, press:false},
+                {char: '9', midi: 61, black:true, press:false},
+                {char: 'O', midi: 62, black:false, press:false},
+                {char: '0', midi: 63, black:true, press:false},
+                {char: 'P', midi: 64, black:false, press:false},
+                {char: '[', midi: 65, black:false, press:false},
+                {char: '=', midi: 66, black:true, press:false},
+                {char: ']', midi: 67, black:false, press:false},
             ]),
+            // default: () => Array.from(Array(12*7).keys(),i=>({
+            //     char:i+24+'',
+            //     midi:i+24,
+            //     black:[1,3,6,8,10].includes(i%12),
+            //     press: false,
+            // })),
         }
     },
     methods:{
         getFreq(pianoKey){
-            return Math.round(440*Math.pow(2, pianoKey.pitch/12))
+            return Math.round(440*Math.pow(2, (pianoKey.midi-69)/12))
         },
         getPianoKey(keyChar){
             keyChar = keyChar.toUpperCase()
@@ -61,30 +68,30 @@ export default {
         handleEnter(pianoKey){
             this.mouse.pianoKey = pianoKey
             if(this.mouse.active)
-                this.handleKeydown(pianoKey)
+                this.triggerAttack(pianoKey)
         },
         handleLeave(pianoKey){
             this.mouse.pianoKey=null
-            this.handleKeyup(pianoKey)
+            this.triggerRelease(pianoKey)
         },
         handleMousedown(e){
             this.mouse.active = true
             if(this.mouse.pianoKey)
-                this.handleKeydown(this.mouse.pianoKey)
+                this.triggerAttack(this.mouse.pianoKey)
         },
         handleMouseup(e){
             this.mouse.active = false
             if(this.mouse.pianoKey)
-                this.handleKeyup(this.mouse.pianoKey)
+                this.triggerRelease(this.mouse.pianoKey)
         },
-        handleKeydown(pianoKey){
+        triggerAttack(pianoKey){
             if(!pianoKey) return
             let f = this.getFreq(pianoKey)
             if(!pianoKey.press)
                 this.$emit('triggerAttack',{f,v:60})
             pianoKey.press = true
         },
-        handleKeyup(pianoKey){
+        triggerRelease(pianoKey){
             if(!pianoKey) return
             if(!pianoKey.press) return
             let f = this.getFreq(pianoKey)
@@ -134,8 +141,8 @@ export default {
     },
     mounted(){
         this.events = {
-            keydown: e=>this.handleKeydown(this.getPianoKey(e.key)),
-            keyup: e=>this.handleKeyup(this.getPianoKey(e.key)),
+            keydown: e=>{if(e.ctrlKey) return;this.triggerAttack(this.getPianoKey(e.key))},
+            keyup: e=>{if(e.ctrlKey) return;this.triggerRelease(this.getPianoKey(e.key))},
             mousedown: e=>this.handleMousedown(e),
             mouseup: e=>this.handleMouseup(e),
             mouseleave: e=>this.handleMouseup(e),

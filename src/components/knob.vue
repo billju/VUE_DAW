@@ -5,7 +5,7 @@ div(:style='containerStyle' @mousedown='handleEventStart' @touchstart='handleEve
 	svg.w-100.h-100(viewBox='0 0 100 100')
 		path(:style='pathStyle' d='M20,76 A 40 40 0 1 1 80 76' stroke='#333333' fill='none')
 		path(:style='pathStyle' d='M20,76 A 40 40 0 1 1 80 76' stroke='#16FFBD' :stroke-dashoffset='Math.round(184-pct*184)' fill='none')
-	div(:style='labelStyle') {{label}}  
+	div(:style='labelStyle' :title="value") {{label}}
 </template>
 
 <script>
@@ -65,7 +65,6 @@ export default {
 				height: `${this.size}px`,
 				position: 'relative',
 				display: 'inline-block',
-				marginBottom: '10px',
 				cursor: 'pointer',
 			}
 		},
@@ -78,14 +77,14 @@ export default {
 				left: '14%',
 				transform: `rotate(${-132+this.pct*264}deg)`,
 				background: '#447799',
-				boxShadow: '0 0 0 5px rgba(0, 0, 0, 0.2) inset',
+				boxShadow: '0 0 0 2px rgba(0, 0, 0, 0.2) inset',
 				borderRadius: '50%',
 			}
 		},
 		pointerStyle(){
 			return {
 				position: 'absolute',
-				height: '20%',
+				height: '6%', //20%
 				width: '6%',
 				top: '15%',
 				left: '50%',
@@ -96,9 +95,10 @@ export default {
 			return {
 				position: 'absolute',
 				color: '#fff',
-				top: '90%',
-				width: '100%',
+				bottom: '-20px',
 				textAlign: 'center',
+				left: '50%',
+				transform: 'translateX(-50%)'
 			}
 		},
 		pathStyle(){

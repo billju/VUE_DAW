@@ -1,5 +1,7 @@
 <template lang="pug">
-input(type="file" @change="importMIDI($event.target.files[0])")
+.btn-group.btn-group-sm
+    .btn.btn-outline-secondary(@click="$refs['file'].click()") import
+    input.d-none(ref="file" type="file" @change="importMIDI($event.target.files[0])")
 </template>
 
 <script>
@@ -9,7 +11,7 @@ import { Buffer } from 'tone'
 export default {
     name: 'MIDI',
     data:()=>({
-        events: {}
+        events: {},
     }),
     props:{
         
@@ -30,8 +32,9 @@ export default {
             const bpm = midi.header.tempos[0].bpm
             const beatSec = 60/bpm/4
             let notes = []
-            midi.tracks.forEach(track=>{
-                track.name
+            for(let track of midi.tracks){
+                if(track.name=='Drums') continue
+                // console.log(track.name)
                 // let { number, family, name, percussion } = track.instrument
                 for(let note of track.notes){
                     let a = false
@@ -40,17 +43,33 @@ export default {
                     let y = 8*12-note.midi+11 // C0 = 12
                     let l = Math.round(note.duration/beatSec)
                     let f = Math.round(440*Math.pow(2,(note.midi-69)/12))
-                    let v = 40//note.velocity*127
+                    let v = note.velocity*127
                     notes.push({a,i,x,y,l,v,f})
                 }
-            })
+            }
             this.$emit('setNotes',notes)
         },
-        encodeMIDI(){
+        encodeMIDI(bpm,notes){
             let midi = new Midi()
+            midi.header.setTempo(bpm)
+            const beatSec = 60/bpm/4
             let track = midi.addTrack()
-            track.addNote({midi:60,time:0,duration:0.2})
-            let buffer = new Buffer(midi.toArray())
+            for(let note of notes)
+                track.addNote({
+                    midi: 8*12-note.y+11,
+                    time: note.x*beatSec,
+                    duration: note.l*beatSec,
+                    velocity: note.v/127
+                })
+            //
+            const blob = new Blob([midi.toArray()],{type:'audio/midi'})
+            const link = document.createElement('a')
+            link.style.display = 'none'
+            document.body.appendChild(link)
+            link.href = URL.createObjectURL(blob)
+            link.download = 'export.midi'
+            link.click()
+            document.body.removeChild(link)
         },
         async requestMIDIAccess(){
             if(navigator.requestMIDIAccess){

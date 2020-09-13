@@ -1,16 +1,19 @@
 <template lang="pug">
 .w-100
-    PianoRoll(ref="pianoRoll" :bpm="bpm" :sampler="sampler")
     .d-flex
-        PianoKeyboard(@triggerAttack="triggerAttack($event)" @triggerRelease="triggerRelease($event)")
-        MIDI(@setNotes="$refs['pianoRoll'].notes=$event")
+        
         //- Osc
         //- ADSR(style="width:300px;height:200px")
-        div
-            Knob(v-model="bpm" :min="40" :max="240")
-            .btn-group.btn-group-sm
-                .btn.btn-outline-primary(v-for="val,key in tempoDict" :key="key" 
-                    :class="key==tempoName?'active':''" @click="bpm=val") {{key}}
+    
+    PianoRoll(ref="pianoRoll" :bpm="bpm" :sampler="sampler")
+        Knob(v-model="bpm" :min="40" :max="240" :size="40" slot="prepend")
+        .btn.btn-dark(contenteditable @blur="bpm=parseInt($event.target.textContent)||120" @keydown.enter="$event.target.blur()") {{bpm}}
+        .btn.btn-outline-primary(v-for="val,key in tempoDict" :key="key" 
+            :class="key==tempoName?'active':''" @click="bpm=val") {{key}}
+        MIDI(ref="midi" @setNotes="setNotes($event)")
+        .btn.btn-outline-secondary(@click="$refs['midi'].encodeMIDI(bpm,$refs['pianoRoll'].notes)") export
+        Effector(slot="append")
+    PianoKeyboard(@triggerAttack="triggerAttack($event)" @triggerRelease="triggerRelease($event)")
 </template>
 
 <script>
@@ -22,10 +25,11 @@ import PianoKeyboard from './components/piano-keyboard'
 import Knob from './components/knob'
 import exportMixin from './mixins/exportMixin'
 import MIDI from './components/midi'
+import Effector from './components/effector'
 
 export default {
     name: 'App',
-    components: {PianoRoll,PianoKeyboard,Knob,Osc,ADSR,MIDI},
+    components: {PianoRoll,PianoKeyboard,Knob,Osc,ADSR,MIDI,Effector},
     mixins: [exportMixin],
     data:()=>({
         events: {}, bpm: 132, sampler: {},
@@ -58,6 +62,11 @@ export default {
             let v = this.stepVelocity(note.v)
             this.sampler[v].triggerRelease(note.f)
         },
+        setNotes(notes){
+            let maxX = Math.max(...notes.map(n=>n.x))
+            this.$refs['pianoRoll'].grid.measure = Math.ceil(maxX/4)+1
+            this.$refs['pianoRoll'].notes=notes
+        },
     },
     computed:{
         tempoName(){
@@ -70,6 +79,13 @@ export default {
         }
     },
     mounted(){
+        // let gain = new Tone.Gain(0.3).toDestination()
+        // let synth = new Tone.PolySynth(Tone.Synth,{
+        //     oscillator:{type:'square8'}
+        // }).connect(gain)
+        // for(let velocity of [2,5,8])
+        //     this.sampler[velocity] = synth
+
         // A0v1~A7v16, C1v1~C8v16 Ds1v7~Ds7v16 Fs1v1~Fs7v16
         const octs = {A:[0,7],C:[1,8],Ds:[1,7],Fs:[1,7]}
         const createSampler = (velocity)=>{
@@ -86,8 +102,9 @@ export default {
                 onload: ()=>{},
             }).toDestination()
         }
-        for(let velocity of [5,10,15])
+        for(let velocity of [2,5,8])
             this.sampler[velocity] = createSampler(velocity)
+
         // 事件
         this.events = {
             

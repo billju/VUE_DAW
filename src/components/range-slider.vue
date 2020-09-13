@@ -1,5 +1,5 @@
 <template lang="pug">
-.bg-secondary.position-relative(ref="container" 
+.bg-secondary.position-absolute(ref="container" 
     @mousedown="handleStart($event)" style="cursor:pointer")
     .w-100.position-absolute(:style="rangeStyle")
 </template>

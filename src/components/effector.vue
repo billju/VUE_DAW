@@ -7,7 +7,7 @@
             .text-left {{effect.toUpperCase()}}
             .w-100.border.mb-3
             .d-flex
-                Knob.mx-3(v-for="k,ki in knobs" :key="ki" :min="k.min" :max="k.max" v-model="k.value" :label="k.label" :size="40")
+                Knob.mx-3(v-for="k,ki in knobs" :key="ki" :min="k.min" :max="k.max" v-model="k.value" @input="k.set($event)" :label="k.label" :size="40")
 </template>
 
 <script>
@@ -29,11 +29,11 @@ export default {
     components: {Knob},
     data:()=>({
         events: {},
-        knobs: [], effect: 'default',
+        knobs: [], effect: 'default', engine: Tone.Gain,
         effects: [
             {
                 name: 'default',
-                engine: Tone,
+                engine: Tone.Gain,
                 knobs: {},
                 menus: {},
             },
@@ -224,11 +224,17 @@ export default {
     }),
     props:{
         // effect: {type:String,default:'Reverb'},
+        sampler: {type:Object},
     },
     methods:{
         setEffect(effect){
             let idx = this.effects.findIndex(e=>e.name==effect)
             if(idx!==-1){
+                for(let v in this.sampler)
+                    this.sampler[v].disconnect(this.engine)
+                let Engine = this.effects[idx].engine
+                this.engine = new Engine().toDestination()
+                // create knobx
                 let knobs = this.effects[idx].knobs
                 this.knobs = []
                 for(let key in knobs)
@@ -238,7 +244,15 @@ export default {
                         max: knobs[key].max,
                         value: knobs[key].value,
                         step: 0.1,
+                        set: (value)=>{
+                            let prop={}
+                            prop[key]=value
+                            this.engine.set(prop)
+                        }
                     })
+                
+                for(let v in this.sampler)
+                    this.sampler[v].connect(this.engine)
             }
         }
     },
@@ -246,7 +260,6 @@ export default {
         
     },
     mounted(){
-        this.setEffect(this.effect)
         this.events = {
             
         }

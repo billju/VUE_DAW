@@ -7,9 +7,9 @@ div(style="width:fit-content;max-width:100%;user-select:none" :style="{cursor}")
             i.fa.fa-undo
         .btn(:class="historyIdx<histories.length-1?'btn-outline-info':'d-none'" @click="traceHistory(1)")
             i.fa.fa-redo
-        .btn.btn-outline-danger
+        .btn.btn-outline-danger(v-if="!recording" @click="recording=true;play()")
             i.fa.fa-circle
-        .btn.btn-outline-danger(v-if="playing" @click="stop()")
+        .btn.btn-outline-danger(v-if="playing||recording" @click="stop()")
             i.fa.fa-stop
         .btn.btn-outline-success(v-else @click="play()")
             i.fa.fa-play
@@ -27,7 +27,7 @@ div(style="width:fit-content;max-width:100%;user-select:none" :style="{cursor}")
             i.position-absolute.text-warning.fa.fa-chevron-down(style="bottom:0;left:-6px" :style="cursorStyle")
     .d-flex(ref="scroll-y" style='overflow-y:scroll;max-height:700px' @contextmenu.prevent="")
         .h-100(@wheel="scaleY($event)")
-            .text-dark(v-for='pG,pi in pianoGrids' :key='pi' :style='pG.style' :class="pG.class" @mousedown="handlePianoStart(pi)") {{pG.content}}
+            .text-dark(v-for='pG,pi in pianoGrids' :key='pi' :style='pG.style' :class="pG.class" @mousedown="pianoStart(pi)") {{pG.content}}
         .hide-scrollbar.position-relative.h-100(ref='scroll-x' style='overflow-x:scroll' @wheel="scrollX($event)" @mousedown='handleStart($event)')
             div(:style='gridStyle')
             transition-group(name="fade")
@@ -38,7 +38,7 @@ div(style="width:fit-content;max-width:100%;user-select:none" :style="{cursor}")
         .flex-grow-0(style="flex-shrink:0" :style="{flexBasis:pianoGrids[0].style.width}")
         div(ref="velocities" style="overflow-x:scroll")
             .position-relative(:style="{width:gridStyle.width,height:'60px'}")
-                RangeSlider(v-for="vel,vi in velocities" :style="vel.style" :value="vel.notes[0].v" @input="vel.notes.map(n=>n.v=$event)")
+                //- RangeSlider(v-for="vel,vi in velocities" :style="vel.style" :value="vel.notes[0].v" @input="vel.notes.map(n=>n.v=$event)")
 </template>
 
 <script>
@@ -67,7 +67,7 @@ export default {
             minor7: [0,3,7,10],
         },
         activeNotes: [], clipboard: [],
-        ticking: false,
+        ticking: false, recording: false,
         resizing: false, cursor: 'auto', resizeBuffer: 6,
         playing: false, mouse: {active:false,x:0,y:0},
         ranging: false, range: {sx:0,sy:0,ex:0,ey:0},
@@ -122,12 +122,17 @@ export default {
         },
         playLoop(){
             let {measure,W} = this.grid
-            for(let note of this.notes){
-                if(note.x==this.playX){
-                    this.triggerAttackRelease(note)
-                    this.triggering.push(note)
-                }else if(note.x+note.l==this.playX-1)
-                    this.triggering =  this.triggering.filter(n=>n!=note)
+            if(this.recording){
+                for(let note of this.activeNotes)
+                    note.l = this.playX - note.x
+            }else{
+                for(let note of this.notes){
+                    if(note.x==this.playX){
+                        this.triggerAttackRelease(note)
+                        this.triggering.push(note)
+                    }else if(note.x+note.l==this.playX-1)
+                        this.triggering =  this.triggering.filter(n=>n!=note)
+                }
             }
             this.playX++
             this.frame = {
@@ -151,6 +156,7 @@ export default {
         },
         stop(){
             this.playing = false
+            this.recording = false
             clearTimeout(this.playTimeout)
             clearInterval(this.scrollInterval)
             this.playX = -1
@@ -198,8 +204,10 @@ export default {
             this.sampler[v].triggerAttackRelease(note.f,duration)
         },
         triggerSelection(shouldRelease=true){
-            for(let note of this.activeNotes.slice(0,5)){
-                note.f = this.grid2freq(note.y)
+            if(!this.activeNotes.length) return
+            let firstNote = this.activeNotes[0]
+            if(!this.activeNotes.every(n=>n.x==firstNote.x)) return
+            for(let note of this.activeNotes){
                 if(shouldRelease)
                     this.triggerAttackRelease(note)
                 else
@@ -213,21 +221,37 @@ export default {
         generateID(){
             return '_' + Math.random().toString(36).substr(2, 9)
         },
-        handlePianoStart(y){
-            this.activeNotes.map(n=>{n.a=false})
-            this.activeNotes = []
-            for(let oy of this.chords[this.chordType]){
-                let newNote = {
-                    i:this.generateID(),
-                    a:true, x:-1,
-                    y: y - oy,
-                    l:this.lastNote.l,
-                    f:this.grid2freq(y-oy),
-                    v:this.lastNote.v,
-                }
-                this.activeNotes.push(newNote)
+        pianoStart(y){
+            // this.activeNotes.map(n=>{n.a=false})
+            // this.activeNotes = []
+            let newNote = {
+                i:this.generateID(),
+                a:true,
+                x:this.playX-1,
+                y:y,
+                l:1,
+                f:this.grid2freq(y),
+                v:this.lastNote.v,
             }
-            this.triggerSelection(false)
+            this.activeNotes.push(newNote)
+            if(this.recording)
+                this.notes.push(newNote)
+            this.triggerAttack(newNote)
+        },
+        pianoEnd(y){
+            if(this.recording){
+                let idx = this.activeNotes.findIndex(n=>n.y==y)
+                if(idx==-1) return
+                let note = this.activeNotes[idx]
+                note.a = false
+                this.triggerRelease(note)
+                this.activeNotes.splice(idx,1)
+            }else{
+                let idx = this.triggering.findIndex(n=>n.y==y)
+                if(idx==-1) return
+                let note = this.triggering[idx]
+                this.triggerRelease(note)
+            }
         },
         handleStart(e){
             let grid = this.getGrid(e.clientX,e.clientY)
@@ -351,7 +375,10 @@ export default {
             this.mouse.y = y
         },
         handleEnd(e){
-            if(this.ranging){
+            if(this.recording){
+                for(let note in this.activeNotes)
+                    this.pianoEnd(note.y)
+            }else if(this.ranging){
                 let {sx,sy,ex,ey} = this.range
                 if(ex<sx) sx = [ex,ex=sx][0]
                 if(ey<sy) sy = [ey,ey=sy][0]
@@ -374,8 +401,8 @@ export default {
                 if(measure>this.grid.measure) this.grid.measure = measure
                 // this.notes.sort((a,b)=>a.x-b.x)
             }else{
-                for(let note of this.triggering)
-                    this.triggerRelease(note)
+                for(let note in this.triggering)
+                    this.pianoEnd(note.y)
             }
             this.deleting = false
             this.mouse.active = false
@@ -513,9 +540,9 @@ export default {
                 // opacity: note.v/128+0.5,
             }
         },
-        addHistory(){
+        addHistory(msg=''){
             this.histories[this.historyIdx] = {
-                notes: JSON.parse(JSON.stringify(this.notes))
+                msg, notes: JSON.parse(JSON.stringify(this.notes))
             }
             this.historyIdx++
             this.histories = this.histories.slice(0,this.historyIdx)
@@ -567,7 +594,8 @@ export default {
             return Math.round(sec*floatPoint)/floatPoint
         },
         endX(){
-            let {beat} = this.grid
+            let {beat,measure} = this.grid
+            if(this.recording) return measure*beat
             let endX = Math.max(...this.notes.map(n=>n.x+n.l))
             endX = Math.ceil(endX/beat)*beat+1
             return endX

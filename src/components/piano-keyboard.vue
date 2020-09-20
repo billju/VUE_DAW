@@ -1,9 +1,16 @@
 <template lang="pug">
-.table-responsive
+.table-responsive.d-flex
     .position-relative(:style='{minWidth}')
         .d-inline-block(v-for='(pk,pi) in pianoKeys' :key='pi' :style='pianoKeyStyle(pk)' 
             @mouseenter='handleEnter(pk)' @mouseleave='handleLeave(pk)')
             div(:style='charStyle(pk)') {{pk.char}}
+    .h-100.btn-group-vertical.btn-group-sm
+        .btn.btn-dark(@click="pianoKeys.map(p=>p.midi+=12)")
+            i.fa.fa-caret-up
+        .btn.btn-dark
+            i.fa.fa-circle-notch
+        .btn.btn-dark(@click="pianoKeys.map(p=>p.midi-=12)")
+            i.fa.fa-caret-down
 </template>
 <script>
 export default {
@@ -86,17 +93,16 @@ export default {
         },
         triggerAttack(pianoKey){
             if(!pianoKey) return
-            let f = this.getFreq(pianoKey)
+            let {midi} = pianoKey
             if(!pianoKey.press)
-                this.$emit('triggerAttack',{f,v:60})
+                this.$emit('triggerAttack',{v:60,midi})
             pianoKey.press = true
         },
         triggerRelease(pianoKey){
-            if(!pianoKey) return
-            if(!pianoKey.press) return
-            let f = this.getFreq(pianoKey)
+            if(!pianoKey||!pianoKey.press) return
+            let {midi} = pianoKey
             if(pianoKey.press)
-                this.$emit('triggerRelease',{f,v:60})
+                this.$emit('triggerRelease',{v:60,midi})
             pianoKey.press = false
         },
         pianoKeyStyle(pianoKey){

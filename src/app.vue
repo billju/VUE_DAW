@@ -1,10 +1,7 @@
 <template lang="pug">
-.w-100
-    .d-flex
-        
-        //- Osc
-        //- ADSR(style="width:300px;height:200px")
-    
+.w-100  
+    //- Osc
+    //- ADSR(style="width:300px;height:200px")
     PianoRoll(ref="pianoRoll" :bpm="bpm" :sampler="sampler")
         Knob(v-model="bpm" :min="40" :max="240" :size="40" slot="prepend")
         .btn.btn-dark(contenteditable @blur="bpm=parseInt($event.target.textContent)||120" @keydown.enter="$event.target.blur()") {{bpm}}
@@ -12,10 +9,9 @@
             :class="key==tempoName?'active':''" @click="bpm=val") {{key}}
         MIDI(ref="midi" @setNotes="setNotes($event)")
         .btn.btn-outline-secondary(@click="$refs['midi'].encodeMIDI(bpm,$refs['pianoRoll'].notes)") export
-        Effector(slot="append")
-    PianoKeyboard(@triggerAttack="triggerAttack($event)" @triggerRelease="triggerRelease($event)")
+        Effector(ref="effector" slot="append" :sampler="sampler")
+    PianoKeyboard(@triggerAttack="$refs['pianoRoll'].pianoStart(107-$event.midi)" @triggerRelease="$refs['pianoRoll'].pianoEnd(107-$event.midi)")
 </template>
-
 <script>
 import * as Tone from 'tone'
 import Osc from './components/osc'
@@ -79,12 +75,12 @@ export default {
         }
     },
     mounted(){
-        // let gain = new Tone.Gain(0.3).toDestination()
         // let synth = new Tone.PolySynth(Tone.Synth,{
         //     oscillator:{type:'square8'}
-        // }).connect(gain)
+        // })
         // for(let velocity of [2,5,8])
         //     this.sampler[velocity] = synth
+        // this.$refs['effector'].setEffect('default')
 
         // A0v1~A7v16, C1v1~C8v16 Ds1v7~Ds7v16 Fs1v1~Fs7v16
         const octs = {A:[0,7],C:[1,8],Ds:[1,7],Fs:[1,7]}
@@ -99,8 +95,11 @@ export default {
             return new Tone.Sampler({
                 urls: Object.fromEntries(entries),
                 baseUrl: 'http://localhost:5500/sounds/piano-samples/',
-                onload: ()=>{},
-            }).toDestination()
+                release: 1,
+                onload: ()=>{
+                    this.$refs['effector'].setEffect('default')
+                },
+            })
         }
         for(let velocity of [2,5,8])
             this.sampler[velocity] = createSampler(velocity)

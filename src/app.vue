@@ -1,20 +1,35 @@
 <template lang="pug">
 .w-100  
-    //- Osc
     //- ADSR(style="width:300px;height:200px")
-    PianoRoll(ref="pianoRoll" :bpm="bpm" :sampler="sampler")
-        Knob(v-model="bpm" :min="40" :max="240" :size="40" slot="prepend")
+    Knob(v-model="bpm" :min="40" :max="240" :size="40")
+    .btn-group.btn-group-sm
+        //- BPM
         .btn.btn-dark(contenteditable @blur="bpm=parseInt($event.target.textContent)||120" @keydown.enter="$event.target.blur()") {{bpm}}
-        .btn.btn-outline-primary(v-for="val,key in tempoDict" :key="key" 
-            :class="key==tempoName?'active':''" @click="bpm=val") {{key}}
+        .btn.btn-outline-primary(v-for="val,key in tempoDict" :key="key" :class="key==tempoName?'active':''" @click="bpm=val") {{key}}
+        //- Piano Roll
+        .btn(:class="PR.historyIdx>1?'btn-outline-info':'d-none'" @click="PR.traceHistory(-1)")
+            i.fa.fa-undo
+        .btn(:class="PR.historyIdx<PR.histories.length-1?'btn-outline-info':'d-none'" @click="PR.traceHistory(1)")
+            i.fa.fa-redo
+        .btn.btn-outline-danger(v-if="!PR.recording" @click="PR.record()")
+            i.fa.fa-circle
+        .btn.btn-outline-danger(v-if="PR.playing||PR.recording" @click="PR.stop()")
+            i.fa.fa-stop
+        .btn.btn-outline-success(v-else @click="PR.play()")
+            i.fa.fa-play
+        .btn(title="鎖定橫向卷軸" :class="PR.freezeScroll?'btn-secondary':'btn-outline-secondary'" @click="PR.freezeScroll=!PR.freezeScroll")
+            i.fa.fa-fast-forward
+        .btn.btn-outline-secondary(@click="PR.randomVelocity()") random velocity
+        //- import, export
         MIDI(ref="midi" @setNotes="setNotes($event)")
-        .btn.btn-outline-secondary(@click="$refs['midi'].encodeMIDI(bpm,$refs['pianoRoll'].notes)") export
-        Effector(ref="effector" slot="append" :sampler="sampler")
-    PianoKeyboard(@triggerAttack="$refs['pianoRoll'].pianoStart(107-$event.midi)" @triggerRelease="$refs['pianoRoll'].pianoEnd(107-$event.midi)")
+        .btn.btn-outline-secondary(@click="$refs['midi'].encodeMIDI(bpm,PR.notes)") export
+        Effector(ref="effector" :sampler="sampler")
+    PianoRoll(ref="pianoRoll" :bpm="bpm" :sampler="sampler")
+    .position-fixed(style="bottom:0;right:0")
+        PianoKeyboard(@triggerAttack="PR.pianoStart(107-$event.midi)" @triggerRelease="PR.pianoEnd(107-$event.midi)")
 </template>
 <script>
 import * as Tone from 'tone'
-import Osc from './components/osc'
 import ADSR from './components/ADSR'
 import PianoRoll from './components/piano-roll'
 import PianoKeyboard from './components/piano-keyboard'
@@ -25,16 +40,17 @@ import Effector from './components/effector'
 
 export default {
     name: 'App',
-    components: {PianoRoll,PianoKeyboard,Knob,Osc,ADSR,MIDI,Effector},
+    components: {PianoRoll,PianoKeyboard,Knob,ADSR,MIDI,Effector},
     mixins: [exportMixin],
     data:()=>({
-        events: {}, bpm: 132, sampler: {},
+        events: {}, bpm: 132, sampler: {}, PR: {histories:[]},
         tempoDict: {
             Largo: 40,
             Adagio: 66,
             Andante: 76,
             Moderato: 108,
             Allegro: 120,
+            JoJo: 131,
             Presto: 168,
             Prestissimo: 200,
         },
@@ -60,8 +76,8 @@ export default {
         },
         setNotes(notes){
             let maxX = Math.max(...notes.map(n=>n.x))
-            this.$refs['pianoRoll'].grid.measure = Math.ceil(maxX/4)+1
-            this.$refs['pianoRoll'].notes=notes
+            this.PR.grid.measure = Math.ceil(maxX/4)+1
+            this.PR.notes=notes
         },
     },
     computed:{
@@ -72,13 +88,14 @@ export default {
                     return keys[i-1]
             }
             return keys[keys.length-1]
-        }
+        },
     },
     mounted(){
+        this.PR = this.$refs['pianoRoll']
         // let synth = new Tone.PolySynth(Tone.Synth,{
         //     oscillator:{type:'square8'}
         // })
-        // for(let velocity of [2,5,8])
+        // for(let velocity of [5])
         //     this.sampler[velocity] = synth
         // this.$refs['effector'].setEffect('default')
 
@@ -97,11 +114,11 @@ export default {
                 baseUrl: 'http://localhost:5500/sounds/piano-samples/',
                 release: 1,
                 onload: ()=>{
-                    this.$refs['effector'].setEffect('default')
+                    this.$refs['effector'].setEffect('效果器')
                 },
             })
         }
-        for(let velocity of [2,5,8])
+        for(let velocity of [3,6,9,12])
             this.sampler[velocity] = createSampler(velocity)
 
         // 事件

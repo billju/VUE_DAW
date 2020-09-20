@@ -47,6 +47,7 @@ export default {
                     notes.push({a,i,x,y,l,v,f})
                 }
             }
+            notes = notes.filter(n=>n.x+n.l<720)
             this.$emit('setNotes',notes)
         },
         encodeMIDI(bpm,notes){

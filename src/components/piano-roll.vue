@@ -1,54 +1,35 @@
 <template lang="pug">
-div(style="width:fit-content;max-width:100%;user-select:none" :style="{cursor}")
-    slot(name="prepend")
-    .btn-group.btn-group-sm
-        slot
-        .btn(:class="historyIdx>1?'btn-outline-info':'d-none'" @click="traceHistory(-1)")
-            i.fa.fa-undo
-        .btn(:class="historyIdx<histories.length-1?'btn-outline-info':'d-none'" @click="traceHistory(1)")
-            i.fa.fa-redo
-        .btn.btn-outline-danger(v-if="!recording" @click="recording=true;play()")
-            i.fa.fa-circle
-        .btn.btn-outline-danger(v-if="playing||recording" @click="stop()")
-            i.fa.fa-stop
-        .btn.btn-outline-success(v-else @click="play()")
-            i.fa.fa-play
-        .btn(title="鎖定橫向卷軸" :class="freezeScroll?'btn-secondary':'btn-outline-secondary'" @click="freezeScroll=!freezeScroll")
-            i.fa.fa-fast-forward
-        .btn.btn-outline-secondary(@click="randomVelocity()") random velocity
-        select.btn.btn-outline-secondary(v-model="chordType")
-            option(v-for="val,name in chords" :key="name" :value="name") {{name}}
-        slot(name="append")
+div(style="max-width:100%;user-select:none" :style="{cursor}")
     .d-flex.bg-dark
         .flex-grow-0(style="flex-shrink:0" :style="{flexBasis:pianoGrids[0].style.width}")
         .hide-scrollbar.position-relative.text-light(ref="ticks" style="overflow-x:scroll")
             .d-inline-flex.pr-3(@wheel="scaleX($event)"  @mousedown="ticking=true;handleMove($event)")
                 .h-100(v-for="tick,ti in ticks" :key="ti" :style="tick.style") {{tick.content}}
             i.position-absolute.text-warning.fa.fa-chevron-down(style="bottom:0;left:-6px" :style="cursorStyle")
-    .d-flex(ref="scroll-y" style='overflow-y:scroll;max-height:700px' @contextmenu.prevent="")
+    .d-flex(ref="scroll-y" style="overflow-y:scroll;max-height:calc(100vh - 150px)" @contextmenu.prevent="")
         .h-100(@wheel="scaleY($event)")
-            .text-dark(v-for='pG,pi in pianoGrids' :key='pi' :style='pG.style' :class="pG.class" @mousedown="pianoStart(pi)") {{pG.content}}
-        .hide-scrollbar.position-relative.h-100(ref='scroll-x' style='overflow-x:scroll' @wheel="scrollX($event)" @mousedown='handleStart($event)')
-            div(:style='gridStyle')
+            .text-dark(v-for="pG,pi in pianoGrids" :key="pi" :style="pG.style" :class="pG.class" @mousedown="pianoStart(pi)") {{pG.content}}
+        .hide-scrollbar.position-relative.h-100(ref="scroll-x" style="overflow-x:scroll" @wheel="scrollX($event)" @mousedown="handleStart($event)")
+            div(:style="gridStyle")
             transition-group(name="fade")
-                small.text-center(v-for='note in notes' :key='note.i' :style='noteStyle(note)') {{note.l*grid.W>30&&grid.H>14?grid2note(note.y):''}}
-            div(:style='rangeStyle')
-            .position-absolute.h-100.border.border-primary(style="left:0;top:0" :style='cursorStyle')
+                small.text-center(v-for="note in notes" :key="note.i" :style="noteStyle(note)") {{note.l*grid.W>30&&grid.H>14?grid2note(note.y):''}}
+            div(:style="rangeStyle")
+            .position-absolute.h-100.border.border-primary(style="left:0;top:0" :style="cursorStyle")
     .d-flex.bg-dark.pr-3
-        .flex-grow-0(style="flex-shrink:0" :style="{flexBasis:pianoGrids[0].style.width}")
+        .flex-grow-0.hide-scrollbar(style="flex-shrink:0;overflow-x:hidden;cursor:pointer" :style="{flexBasis:pianoGrids[0].style.width,height:grid.vH+22+'px'}")
+            .small.text-center(v-for="val,name in chords" :key="name" @click="chordType=name" 
+                :class="chordType==name?'text-light bg-secondary':'text-muted bg-dark'") {{name}}
         div(ref="velocities" style="overflow-x:scroll")
-            .position-relative(:style="{width:gridStyle.width,height:'60px'}")
-                //- RangeSlider(v-for="vel,vi in velocities" :style="vel.style" :value="vel.notes[0].v" @input="vel.notes.map(n=>n.v=$event)")
+            .position-relative(:style="{width:gridStyle.width,height:grid.vH+4+'px'}" @mousedown="velociting=true;setVelocity($event)")
+                .position-absolute(v-for="note in notes" :key="note.i" :style="velStyle(note)")
 </template>
 
 <script>
-import RangeSlider from './range-slider'
 
 export default {
     name: 'piano-roll',
-    components: {RangeSlider},
     data:()=>({
-        grid: {W:20,H:15,octave:8,measure:32,beat:4},
+        grid: {W:20,H:15,octave:8,measure:32,beat:4,vH:48},
         // width height  八度 小節
         notes: [
             // {a:false,x:0,y:0,l:1,f,v,d},
@@ -59,21 +40,27 @@ export default {
         chordType: 'mono',
         chords: {
             mono: [0],
-            majorScale: [2,4,5,7,9,11,12],
-            minorScale: [2,3,5,7,8,10,12],
             major: [0,4,7],
             minor: [0,3,7],
             major7: [0,4,7,11],
             minor7: [0,3,7,10],
         },
         activeNotes: [], clipboard: [],
-        ticking: false, recording: false,
-        resizing: false, cursor: 'auto', resizeBuffer: 6,
-        playing: false, mouse: {active:false,x:0,y:0},
-        ranging: false, range: {sx:0,sy:0,ex:0,ey:0},
-        deleting: false, ctrlKey: false, shiftKey: false,
+        ticking: false, // 調整時間軸
+        recording: false, // 錄音中
+        velociting: false, // 調整力度
+        resizing: false, // 調整音符長短
+        resizeBuffer: 6,
+        playing: false, // 正在播放
+        range: {sx:0,sy:0,ex:0,ey:0}, // 正在選取範圍
+        ranging: false, 
+        cursor: 'auto', // css鼠標
+        mouse: {active:false,x:0,y:0},
+        deleting: false, // 正在按右鍵刪除
+        ctrlKey: false, shiftKey: false,
         events: {},
-        triggering: [], playX: -1, 
+        triggering: [], // 以觸發的音訊
+        playX: -1, 
         playTimeout: null, scrollInterval: null, freezeScroll: false,
         frame:{from:0,to:0,num:0,den:1,FPS:30},
         historyIdx:0, histories: [],
@@ -84,7 +71,8 @@ export default {
     },
     methods:{
         randomVelocity(){
-            this.notes.map(n=>n.v=Math.round(Math.random()*80))
+            this.notes.filter(n=>!this.triggering.includes(n))
+                .map(n=>n.v=Math.round(Math.random()*127))
         },
         minmax(input,min,max){return input>max?max:input<min?min:input},
         scaleX(e,arg){
@@ -147,6 +135,13 @@ export default {
                 this.stop()
             else
                 this.playTimeout = setTimeout(()=>{this.playLoop()},this.beatSec*1000)
+        },
+        record(){
+            for(let note of this.activeNotes)
+                note.a = false
+            this.activeNotes = []
+            this.recording = true
+            this.play()
         },
         play(){
             if(this.playing) return
@@ -319,7 +314,22 @@ export default {
             let ys = this.activeNotes.map(n=>n.y+dy).every(y=>0<=y&&y<octave*12)
             return xs&&ys
         },
+        setVelocity(e){
+            let {x} = this.getGrid(e.clientX,e.clientY)
+            let {vH} = this.grid
+            let {top} = this.$refs['velocities'].getBoundingClientRect()
+            let velocity = 127-this.minmax(parseInt((e.clientY-top)/vH*127),0,127)
+            if(this.activeNotes.length)
+                this.activeNotes.filter(n=>n.x<=x&&x<n.x+n.l)
+                    .filter(n=>!this.triggering.includes(n))
+                    .map(n=>n.v=velocity)
+            else
+                this.notes.filter(n=>n.x<=x&&x<n.x+n.l)
+                    .filter(n=>!this.triggering.includes(n))
+                    .map(n=>n.v=velocity)
+        },
         handleMove(e){
+            if(this.velociting) return this.setVelocity(e)
             let {x,y,rx,ry} = this.getGrid(e.clientX,e.clientY)
             if(x<0) return 
             let notes = this.notes.filter(n=>n.y==y).filter(n=>n.x<=x&&x<n.x+n.l)
@@ -364,6 +374,8 @@ export default {
                 if(this.deleting){
                     this.addHistory()
                     this.notes = this.notes.filter(n=>n!=notes[0])
+                }else if(this.velociting){
+                    this.cursor = 'ns-resize'
                 }else if(dx<this.resizeBuffer||dx>notes[0].l*W-this.resizeBuffer||this.resizing)
                     this.cursor = 'ew-resize'
                 else
@@ -405,6 +417,7 @@ export default {
                     this.pianoEnd(note.y)
             }
             this.deleting = false
+            this.velociting = false
             this.mouse.active = false
             this.ticking = false
         },
@@ -412,6 +425,7 @@ export default {
             this.clipboard = JSON.parse(JSON.stringify(this.activeNotes))
         },
         pasteNotes(){
+            this.addHistory()
             let minX = Math.min(...this.clipboard.map(n=>n.x))
             let startX = this.mouse.x
             let cloned = JSON.parse(JSON.stringify(this.clipboard))
@@ -429,7 +443,6 @@ export default {
             this.activeNotes = []
         },
         handleKeydown(e){
-            console.log(e.key)
             switch(e.key.toUpperCase()){
                 case 'SHIFT':
                     this.shiftKey = true; break
@@ -537,7 +550,17 @@ export default {
                 lineHeight: H-2+'px',
                 width: note.l*W-2+'px',
                 background: note.a?'#FFA3A4':'#C4FACF',
-                // opacity: note.v/128+0.5,
+                opacity: (note.v/127)*0.5+0.5,
+            }
+        },
+        velStyle(note){
+            let {W,H,vH} = this.grid
+            return {
+                bottom:note.v/127*vH+'px',
+                left: note.x*W+'px',
+                width: note.l*W+'px',
+                height:'4px',
+                background: note.a?'#FFA3A4':'#C4FACF',
             }
         },
         addHistory(msg=''){
@@ -555,6 +578,7 @@ export default {
             this.historyIdx = this.minmax(this.historyIdx+offset,0,this.histories.length-1)
             let {notes} = this.histories[this.historyIdx]
             this.notes = notes
+            this.activeNotes = notes.filter(n=>n.a)
         },
     },
     computed:{
@@ -566,24 +590,6 @@ export default {
                         width: W*4+'px',
                     },
                     content: i+1,
-                }
-            })
-        },
-        velocities(){
-            let {W,measure} = this.grid
-            let xs = [...new Set(this.notes.map(n=>n.x))]
-            return xs.map(x=>{
-                let notes = this.notes.filter(n=>n.x==x)
-                return {
-                    notes,
-                    style: {
-                        position: 'absolute',
-                        top: 0,
-                        left: W*x+'px',
-                        width: W-4+'px',
-                        marginRight: '4px',
-                        height: '60px',
-                    },
                 }
             })
         },

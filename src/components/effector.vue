@@ -17,7 +17,7 @@ const NormalRange = {min:0,max:1,value:0.5}
 const Time = {min:0,max:1,value:0.1}
 const Positive = {min:0,max:10,value:1}
 const Cents = {min:-100,max:100,value:0}
-const Frequency = {min:20,max:2e4,value:440}
+const Frequency = {min:80,max:3600,value:440}
 const Decibels = {min:0,max:80,value:50}
 const Degrees = {min:0,max:360,value:0}
 const ToneOscillatorType = ['fatsine','fatsquare','fatsawtooth','fattriangle','fatcustom','fmsine','fmsquare','fmsawtooth','fmtriangle','fmcustom','amsine','amsquare','amsawtooth','amtriangle','amcustom','pulse','pwm']
@@ -29,12 +29,20 @@ export default {
     components: {Knob},
     data:()=>({
         events: {},
-        knobs: [], effect: 'default', engine: Tone.Gain,
+        knobs: [], effect: '效果器', engine: Tone.Gain,
         effects: [
             {
-                name: 'default',
+                name: '效果器',
                 engine: Tone.Gain,
                 knobs: {},
+                menus: {},
+            },
+            {
+                name: 'Gain',
+                engine: Tone.Gain,
+                knobs: {
+                    gain: NormalRange,
+                },
                 menus: {},
             },
             {
@@ -144,18 +152,18 @@ export default {
                 name: 'EQ3',
                 engine: Tone.EQ3,
                 knobs: {
-                    high : Decibels,
-                    highFrequency : Frequency,
-                    low : Decibels,
-                    lowFrequency : Frequency,
-                    mid : Decibels,
+                    high : {min:0,max:0.5,value:0.25},
+                    highFrequency : {min:2000,max:2e4,value:6000},
+                    low : {min:0,max:0.5,value:0.25},
+                    lowFrequency : {min:20,max:440,value:220},
+                    mid : {min:0,max:0.5,value:0.25},
                 },
                 menus: {
 
                 },
             },
             {
-                name: 'FeedBackDelay',
+                name: 'Delay',
                 engine: Tone.FeedbackDelay,
                 knobs: {
                     delayTime : Time,
@@ -201,19 +209,6 @@ export default {
                     depth : NormalRange,
                     frequency : Frequency,
                     spread : Degrees,
-                    wet : NormalRange,
-                },
-                menus: {
-                    type : ToneOscillatorType,
-                },
-            },
-            {
-                name: 'Vibrato',
-                engine: Tone.Vibrato,
-                knobs: {
-                    depth : NormalRange,
-                    frequency : Frequency,
-                    maxDelay : Time,
                     wet : NormalRange,
                 },
                 menus: {

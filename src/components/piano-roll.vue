@@ -216,7 +216,7 @@ export default {
         generateID(){
             return '_' + Math.random().toString(36).substr(2, 9)
         },
-        pianoStart(y){
+        pianoStart(y,v=60){
             // this.activeNotes.map(n=>{n.a=false})
             // this.activeNotes = []
             let newNote = {
@@ -226,7 +226,7 @@ export default {
                 y:y,
                 l:1,
                 f:this.grid2freq(y),
-                v:this.lastNote.v,
+                v:v,
             }
             this.activeNotes.push(newNote)
             if(this.recording)

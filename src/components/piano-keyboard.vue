@@ -76,25 +76,25 @@ export default {
         handleEnter(pianoKey){
             this.mouse.pianoKey = pianoKey
             if(this.mouse.active)
-                this.triggerAttack(pianoKey)
+                this.noteOn(pianoKey)
         },
         handleLeave(pianoKey){
             this.mouse.pianoKey=null
-            this.triggerRelease(pianoKey)
+            this.noteOff(pianoKey)
         },
         handleMousedown(e){
             this.mouse.active = true
             if(this.mouse.pianoKey)
-                this.triggerAttack(this.mouse.pianoKey)
+                this.noteOn(this.mouse.pianoKey)
         },
         handleMouseup(e){
             this.mouse.active = false
             if(this.mouse.pianoKey)
-                this.triggerRelease(this.mouse.pianoKey)
+                this.noteOff(this.mouse.pianoKey)
         },
         setOctave(offset=1){
             for(let pk of this.pianoKeys){
-                if(pk.press) this.triggerRelease(pk)
+                if(pk.press) this.noteOff(pk)
                 pk.midi+=12*offset
             }
             this.octave+= offset
@@ -103,23 +103,23 @@ export default {
             if(e.ctrlKey) return
             else if(e.key=='PageUp'){e.preventDefault();this.setOctave(1)}
             else if(e.key=='PageDown'){e.preventDefault();this.setOctave(-1)}
-            this.triggerAttack(this.getPianoKey(e.key))
+            this.noteOn(this.getPianoKey(e.key))
         },
         handleKeyup(e){
-            this.triggerRelease(this.getPianoKey(e.key))
+            this.noteOff(this.getPianoKey(e.key))
         },
-        triggerAttack(pianoKey){
+        noteOn(pianoKey){
             if(!pianoKey) return
             let {midi} = pianoKey
             if(!pianoKey.press)
-                this.$emit('triggerAttack',{v:72,midi})
+                this.$emit('noteOn',{v:72,midi})
             pianoKey.press = true
         },
-        triggerRelease(pianoKey){
+        noteOff(pianoKey){
             if(!pianoKey||!pianoKey.press) return
             let {midi} = pianoKey
             if(pianoKey.press)
-                this.$emit('triggerRelease',{v:72,midi})
+                this.$emit('noteOff',{v:72,midi})
             pianoKey.press = false
         },
         pianoKeyStyle(pianoKey){

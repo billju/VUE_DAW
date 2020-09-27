@@ -82,37 +82,26 @@ export default {
                 }
             }
         },
-        getMIDIMessage(){
-            let [command,note,velocity] = msg.data
+        getMIDIMessage(msg){
+            let [command,midi,velocity] = msg.data 
             switch(command){
                 case 144: //note on
-                    noteOn(note,velocity)
+                    this.$emit('noteOn',{midi,velocity})
                     break
                 case 128: //note off
-                    noteOff(note,velocity)
+                    this.$emit('noteOff',{midi,velocity})
                     break;
             }
         },
-        noteOn(note,velocity){
-            
-        },
-        noteOff(note,velocity){
-
-        }
     },
     computed:{
         
     },
     mounted(){
-        this.events = {
-            
-        }
-        for(let name in this.events)
-            window.addEventListener(name,this.events[name])
+        this.requestMIDIAccess()
     },
     beforeDestroy(){
-        for(let name in this.events)
-            window.removeEventListener(name,this.events[name])
+        
     },
 }
 </script>

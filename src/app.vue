@@ -21,12 +21,14 @@
             i.fa.fa-fast-forward
         .btn.btn-outline-secondary(@click="PR.randomVelocity()") random velocity
         //- import, export
-        MIDI(ref="midi" @setNotes="setNotes($event)")
+        MIDI(ref="midi" @setNotes="setNotes($event)" 
+            @noteOn="PR.pianoStart(107-$event.midi,$event.velocity)" 
+            @noteOff="PR.pianoEnd(107-$event.midi)")
         .btn.btn-outline-secondary(@click="$refs['midi'].encodeMIDI(bpm,PR.notes)") export
         Effector(ref="effector" :sampler="sampler")
     PianoRoll(ref="pianoRoll" :bpm="bpm" :sampler="sampler")
     .position-fixed(style="bottom:0;right:0")
-        PianoKeyboard(@triggerAttack="PR.pianoStart(107-$event.midi)" @triggerRelease="PR.pianoEnd(107-$event.midi)")
+        PianoKeyboard(@noteOn="PR.pianoStart(107-$event.midi)" @noteOff="PR.pianoEnd(107-$event.midi)")
 </template>
 <script>
 import * as Tone from 'tone'
@@ -118,7 +120,7 @@ export default {
                 },
             })
         }
-        for(let velocity of [3,6,9,12])
+        for(let velocity of [2,5,8,10])
             this.sampler[velocity] = createSampler(velocity)
 
         // 事件

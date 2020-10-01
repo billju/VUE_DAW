@@ -119,11 +119,11 @@ export default {
 			touchcancel: e=>this.handleEventEnd(e),
 		}
 		for(let name in this.events)
-			window.addEventListener(name,this.events[name])
+			window.addEventListener(name,this.events[name],{passive:false})
 	},
 	beforeDestroy(){
 		for(let name in this.events)
-			window.removeEventListener(name,this.events[name])
+			window.removeEventListener(name,this.events[name],{passive:false})
 	}  
 }
 </script>

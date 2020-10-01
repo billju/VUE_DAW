@@ -1,35 +1,38 @@
 <template lang="pug">
-    
+.btn.btn-outline-danger(v-if="stream" @click="stopMedia()" title="已開啟麥克風")
+	i.fa.fa-microphone
+.btn.btn-outline-secondary(v-else @click="getUserMedia()" title="已關閉麥克風")
+	i.fa.fa-microphone-slash
 </template>
 
 <script>
 export default {
     name: '',
     data:()=>({
-		noteNames: ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
-		buf: new Float32Array(1024),
+		midiNames: ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
+		buf: new Float32Array(1024), stream: null, movingAvg: [], lastMidi: null,
 		analyser:{}, mediaStreamSource: {}, animationFrame: null,
-        events: {}
+        events: {}, audioContext: new AudioContext(),
     }),
-    props:{
-		audioContext: {type:Object},
-    },
     methods:{
-		pitch2note(frequency){
-			let noteNum = 12 * (Math.log( frequency / 440 )/Math.log(2) );
-			return Math.round( noteNum ) + 69;
+		freq2midi(frequency){
+			let midiNum = 12 * (Math.log( frequency / 440 )/Math.log(2) );
+			return Math.round( midiNum ) + 69;
 		},
-		note2pitch(noteNum){
-			return 440 * Math.pow(2,(noteNum-69)/12);
+		midi2freq(midiNum){
+			return 440 * Math.pow(2,(midiNum-69)/12);
 		},
-		pitch2cents(frequency,noteNum){
-			return Math.floor( 1200 * Math.log( frequency / note2pitch( noteNum ))/Math.log(2) );
+		freq2cents(frequency,midiNum){
+			return Math.floor( 1200 * Math.log( frequency / this.midi2freq( midiNum ))/Math.log(2) );
+		},
+		stopMedia(){
+			this.stream.getTracks().forEach(track=>track.stop());
+			this.stream = null;
+			cancelAnimationFrame(this.animationFrame);
 		},
        	getUserMedia(){
 			try {
-				let {getUserMedia,webkitGetUserMedia,mozGetUserMedia} = navigator
-				navigator.getUserMedia = getUserMedia||webkitGetUserMedia||mozGetUserMedia
-				navigator.getUserMedia({
+				navigator.mediaDevices.getUserMedia({
 					audio: {
 						mandatory: {
 							googEchoCancellation: false,
@@ -39,29 +42,45 @@ export default {
 						},
 						optional: []
 					},
-				}, this.gotStream);
+				}).then(this.gotStream);
 			} catch (e) {
 				alert('getUserMedia threw exception :' + e);
 			}
 		},
 		gotStream(stream){
+			this.stream = stream;
 			this.mediaStreamSource = this.audioContext.createMediaStreamSource(stream);
 			this.analyser = this.audioContext.createAnalyser();
 			this.analyser.fftSize = 2048;
 			this.mediaStreamSource.connect( this.analyser );
 			this.updatePitch()
 		},
+		sample(){
+			const getAvg = (arr)=>arr.reduce((acc,cur)=>acc+cur,0)/arr.length
+			let midi = Math.round(getAvg(this.movingAvg.filter(a=>a)))
+			if(midi<12||midi>96) midi = null
+			let noteOff = !midi
+			let noteOn = midi!=this.lastMidi
+			if(this.lastMidi&&(noteOff||noteOn))
+				this.$emit('noteOff', this.lastMidi)
+			if(midi&&noteOn)
+				this.$emit('noteOn', midi)
+			this.lastMidi = midi
+		},
 		updatePitch(){
 			this.analyser.getFloatTimeDomainData( this.buf )
-			let pitch = this.autoCorrelate( this.buf, this.audioContext.sampleRate );
-			if (pitch == -1) { // vague
+			let freq = this.autoCorrelate( this.buf, this.audioContext.sampleRate );
+			let midi = null
+			if (freq == -1) { // vague
 				
 			} else {
-				let note =  this.noteFromPitch( pitch );
-				let name = this.noteNames[note%12];
-				let detune = this.pitch2cents( pitch, note );
+				midi =  this.freq2midi( freq );
+				// let name = this.midiNames[midi%12]+Math.floor(midi/12);
+				// let detune = this.freq2cents( freq, midi );	
 			}
-			this.animationFrame = requestAnimationFrame( updatePitch )
+			this.movingAvg.push(midi)
+			this.movingAvg = this.movingAvg.slice(-1)
+			this.animationFrame = requestAnimationFrame( this.updatePitch )
 		},
 		autoCorrelate(buf, sampleRate){
 			var MIN_SAMPLES = 0;  // will be initialized when AudioContext is created.
@@ -79,7 +98,7 @@ export default {
 				rms += val*val;
 			}
 			rms = Math.sqrt(rms/SIZE);
-			if (rms<0.01) // not enough signal
+			if (rms<0.1) // not enough signal
 				return -1;
 
 			let lastCorrelation=1;

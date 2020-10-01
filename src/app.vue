@@ -1,34 +1,36 @@
 <template lang="pug">
-.w-100  
+.d-flex.flex-column.h-100
     //- ADSR(style="width:300px;height:200px")
-    Knob(v-model="bpm" :min="40" :max="240" :size="40")
-    .btn-group.btn-group-sm
-        //- BPM
-        .btn.btn-dark(contenteditable @blur="bpm=parseInt($event.target.textContent)||120" @keydown.enter="$event.target.blur()") {{bpm}}
-        .btn.btn-outline-primary(v-for="val,key in tempoDict" :key="key" :class="key==tempoName?'active':''" @click="bpm=val") {{key}}
-        //- Piano Roll
-        .btn(:class="PR.historyIdx>1?'btn-outline-info':'d-none'" @click="PR.traceHistory(-1)")
-            i.fa.fa-undo
-        .btn(:class="PR.historyIdx<PR.histories.length-1?'btn-outline-info':'d-none'" @click="PR.traceHistory(1)")
-            i.fa.fa-redo
-        .btn.btn-outline-danger(v-if="!PR.recording" @click="PR.record()")
-            i.fa.fa-circle
-        .btn.btn-outline-danger(v-if="PR.playing||PR.recording" @click="PR.stop()")
-            i.fa.fa-stop
-        .btn.btn-outline-success(v-else @click="PR.play()")
-            i.fa.fa-play
-        .btn(title="鎖定橫向卷軸" :class="PR.freezeScroll?'btn-secondary':'btn-outline-secondary'" @click="PR.freezeScroll=!PR.freezeScroll")
-            i.fa.fa-fast-forward
-        .btn.btn-outline-secondary(@click="PR.randomVelocity()") random velocity
-        //- import, export
-        MIDI(ref="midi" @setNotes="setNotes($event)" 
-            @noteOn="PR.pianoStart(107-$event.midi,$event.velocity)" 
-            @noteOff="PR.pianoEnd(107-$event.midi)")
-        .btn.btn-outline-secondary(@click="$refs['midi'].encodeMIDI(bpm,PR.notes)") export
-        Effector(ref="effector" :sampler="sampler")
-    PianoRoll(ref="pianoRoll" :bpm="bpm" :sampler="sampler")
+    .d-flex.flex-shrink-0.overflow-auto
+        .btn-group.btn-group-sm.align-items-center.text-nowrap
+            Knob(v-model="bpm" :min="40" :max="240" :size="40")
+            //- BPM
+            .btn.btn-dark(contenteditable @blur="bpm=parseInt($event.target.textContent)||120" @keydown.enter="$event.target.blur()") {{bpm}}
+            .btn.btn-outline-primary(v-for="val,key in tempoDict" :key="key" :class="key==tempoName?'active':''" @click="bpm=val") {{key}}
+            //- Piano Roll
+            .btn(:class="PR.historyIdx>1?'btn-outline-info':'d-none'" @click="PR.traceHistory(-1)")
+                i.fa.fa-undo
+            .btn(:class="PR.historyIdx<PR.histories.length-1?'btn-outline-info':'d-none'" @click="PR.traceHistory(1)")
+                i.fa.fa-redo
+            .btn.btn-outline-danger(v-if="!PR.recording" @click="PR.record()")
+                i.fa.fa-circle
+            .btn.btn-outline-danger(v-if="PR.playing||PR.recording" @click="PR.stop()")
+                i.fa.fa-stop
+            .btn.btn-outline-success(v-else @click="PR.play()")
+                i.fa.fa-play
+            .btn(title="鎖定橫向卷軸" :class="PR.freezeScroll?'btn-secondary':'btn-outline-secondary'" @click="PR.freezeScroll=!PR.freezeScroll")
+                i.fa.fa-fast-forward
+            .btn.btn-outline-secondary(@click="PR.randomVelocity()") random velocity
+            Pitch(ref="pitch" @noteOn="PR.pianoStart($event)" @noteOff="PR.pianoEnd($event)")
+            //- import, export
+            MIDI(ref="midi" @setNotes="setNotes($event)" 
+                @noteOn="PR.pianoStart($event.midi,$event.velocity)" 
+                @noteOff="PR.pianoEnd($event.midi)")
+            .btn.btn-outline-secondary(@click="$refs['midi'].encodeMIDI(bpm,PR.notes)") export
+            Effector(ref="effector" :sampler="sampler")
+    PianoRoll(ref="pianoRoll" :bpm="bpm" :sampler="sampler" @tick="$refs['pitch'].sample()")
     .position-fixed(style="bottom:0;right:0")
-        PianoKeyboard(@noteOn="PR.pianoStart(107-$event.midi)" @noteOff="PR.pianoEnd(107-$event.midi)")
+        PianoKeyboard(@noteOn="PR.pianoStart($event.midi)" @noteOff="PR.pianoEnd($event.midi)")
 </template>
 <script>
 import * as Tone from 'tone'
@@ -39,10 +41,11 @@ import Knob from './components/knob'
 import exportMixin from './mixins/exportMixin'
 import MIDI from './components/midi'
 import Effector from './components/effector'
+import Pitch from './components/pitch'
 
 export default {
     name: 'App',
-    components: {PianoRoll,PianoKeyboard,Knob,ADSR,MIDI,Effector},
+    components: {PianoRoll,PianoKeyboard,Knob,ADSR,MIDI,Effector,Pitch},
     mixins: [exportMixin],
     data:()=>({
         events: {}, bpm: 132, sampler: {}, PR: {histories:[]},
@@ -138,8 +141,12 @@ export default {
 </script>
 
 <style>
+*{
+    font-family: 微軟正黑體;
+}
 html,body{
     margin: 0;
-    font-family: 微軟正黑體;
+    width: 100%;
+    height: 100%;
 }
 </style>

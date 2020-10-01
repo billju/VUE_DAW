@@ -1,26 +1,34 @@
 <template lang="pug">
-div(style="max-width:100%;user-select:none" :style="{cursor}")
-    .d-flex.bg-dark
-        .flex-grow-0(style="flex-shrink:0" :style="{flexBasis:pianoGrids[0].style.width}")
-        .hide-scrollbar.position-relative.text-light(ref="ticks" style="overflow-x:scroll")
-            .d-inline-flex.pr-3(@wheel="scaleX($event)"  @mousedown="ticking=true;handleMove($event)")
-                .h-100(v-for="tick,ti in ticks" :key="ti" :style="tick.style") {{tick.content}}
-            i.position-absolute.text-warning.fa.fa-chevron-down(style="bottom:0;left:-6px" :style="cursorStyle")
-    .d-flex(ref="scroll-y" style="overflow-y:scroll;max-height:calc(100vh - 150px)" @contextmenu.prevent="")
-        .h-100(@wheel="scaleY($event)")
-            .text-dark(v-for="pG,pi in pianoGrids" :key="pi" :style="pG.style" :class="pG.class" @mousedown="pianoStart(pi)") {{pG.content}}
-        .hide-scrollbar.position-relative.h-100(ref="scroll-x" style="overflow-x:scroll" @wheel="scrollX($event)" @mousedown="handleStart($event)")
-            div(:style="gridStyle")
-            transition-group(name="fade")
-                small.text-center(v-for="note in notes" :key="note.i" :style="noteStyle(note)") {{note.l*grid.W>30&&grid.H>14?grid2note(note.y):''}}
-            div(:style="rangeStyle")
-            .position-absolute.h-100.border.border-primary(style="left:0;top:0" :style="cursorStyle")
-    .d-flex.bg-dark.pr-3
-        .flex-grow-0.hide-scrollbar(style="flex-shrink:0;overflow-x:hidden;cursor:pointer" :style="{flexBasis:pianoGrids[0].style.width,height:grid.vH+22+'px'}")
+.d-flex.flex-grow-1(:class="ltr?'flex-column':''" style="user-select:none" :style="{cursor}")
+    .d-flex.flex-shrink-0.bg-dark(:class="ltr?'pr-3':'flex-column-reverse'")
+        .btn.btn-dark.p-0(:style="{flex:`0 0 ${grid.whiteKey}px`,writingMode:ltr?'horizontal-tb':'vertical-lr'}" @click="ltr=!ltr") {{ltr?'編輯':'練琴'}}
+        .flex-grow-1.overflow-auto.hide-scrollbar(ref="ticks" :style="ltr?{width:0}:{height:0}")
+            .position-relative.text-light(:style="ltr?{width:gridStyle.width}:{height:gridStyle.height}")
+                .d-flex(:class="ltr?'':'flex-column-reverse'" @wheel="scaleX($event)" @mousedown="ticking=true;handleMove($event)")
+                    .text-right(v-for="tick,ti in ticks" :key="ti" :style="tick.style") {{tick.content}}
+                i.fa.position-absolute.text-warning(:class="ltr?'fa-chevron-down':'fa-chevron-right'" 
+                    :style="ltr?{...cursorStyle,marginLeft:'-6px'}:{...cursorStyle,marginBottom:'-6px'}")
+    .d-flex.flex-grow-1(:class="ltr?'':'flex-column-reverse hide-scrollbar'" 
+            :style="ltr?{height:0,overflowY:'scroll'}:{width:0,overflowX:'scroll'}" @contextmenu.prevent="")
+        .flex-shrink-0.position-relative(@wheel="scaleY($event)" 
+                :style="ltr?{width:grid.whiteKey+'px'}:{width:gridStyle.width,height:grid.whiteKey+'px'}")
+            .position-absolute.text-dark(v-for="pG,pi in pianoGrids" :key="pi" :style="pG.style" :class="pG.class" @mousedown="pianoStart(grid2midi(pi))") {{pG.content}}
+        .flex-grow-1.overflow-auto.hide-scrollbar(ref="scroller" 
+                :style="ltr?{height:gridStyle.height,width:0}:{width:gridStyle.width,height:0}" 
+                @wheel="handleWheel($event)" @mousedown="handleStart($event)")
+            .position-relative.overflow-hidden(:style="gridStyle")
+                transition-group(name="fade")
+                    small.text-center(v-for="note in notes" :key="note.i" :style="noteStyle(note)") {{note.l*grid.W>30&&grid.H>14?grid2note(note.y):''}}
+                .position-absolute(:style="rangeStyle")
+                .position-absolute.border.border-warning(:class="ltr?'h-100':'w-100'" :style="cursorStyle")
+    .d-flex.flex-shrink-0.bg-dark(:class="ltr?'pr-3':'flex-column-reverse'")
+        .hide-scrollbar(style="overflow-x:hidden;cursor:pointer" :style="{flex:`0 0 ${grid.whiteKey}px`}")
             .small.text-center(v-for="val,name in chords" :key="name" @click="chordType=name" 
                 :class="chordType==name?'text-light bg-secondary':'text-muted bg-dark'") {{name}}
-        div(ref="velocities" style="overflow-x:scroll")
-            .position-relative(:style="{width:gridStyle.width,height:grid.vH+4+'px'}" @mousedown="velociting=true;setVelocity($event)")
+        .flex-grow-1.overflow-auto(ref="velocities" :style="ltr?{width:0}:{height:0}")
+            .position-relative(
+                :style="ltr?{width:gridStyle.width,height:grid.vH+4+'px'}:{width:grid.vH+4+'px',height:gridStyle.height}" 
+                    @mousedown="velociting=true;setVelocity($event)")
                 .position-absolute(v-for="note in notes" :key="note.i" :style="velStyle(note)")
 </template>
 
@@ -29,7 +37,8 @@ div(style="max-width:100%;user-select:none" :style="{cursor}")
 export default {
     name: 'piano-roll',
     data:()=>({
-        grid: {W:20,H:15,octave:8,measure:32,beat:4,vH:48},
+        grid: {W:20,H:15,octave:8,measure:32,beat:4,vH:48,blackKey:30,whiteKey:60},
+        ltr: false,
         // width height  八度 小節
         notes: [
             // {a:false,x:0,y:0,l:1,f,v,d},
@@ -85,26 +94,43 @@ export default {
             let delta = Math.sign(e.deltaY)*2
             this.grid.H = this.minmax(this.grid.H-delta,10,30)
         },
-        scrollX(e){
-            if(this.shiftKey)
-                this.$refs['scroll-x'].scrollLeft+= Math.sign(e.deltaY)*100
+        handleWheel(e){
+            if(this.shiftKey){
+                this.$refs['scroller'].scrollLeft+= Math.sign(e.deltaY)*100
+            }else if(!this.ltr&&!(this.freezeScroll&&this.playing)){
+                e.preventDefault();
+                this.$refs['scroller'].scrollTop+= Math.sign(e.deltaY)*150
+            }
         },
         getGrid(cx,cy){
-            let {scrollLeft} = this.$refs['scroll-x']
-            let {top,left} = this.$refs['scroll-x'].getBoundingClientRect()
+            let {scrollLeft,scrollTop} = this.$refs['scroller']
+            let {top,left,right} = this.$refs['scroller'].getBoundingClientRect()
             let {W,H,octave,measure} = this.grid
-            let rx = cx-left+scrollLeft
-            let ry = cy-top
-            let x = Math.floor(rx/W)
-            let y = Math.floor(ry/H)
-            return {x,y,rx,ry}
+            if(this.ltr){
+                let rx = cx-left+scrollLeft
+                let ry = cy-top
+                let x = Math.floor(rx/W)
+                let y = Math.floor(ry/H)
+                return {x,y,rx,ry}
+            }else{
+                let rx = parseInt(this.gridStyle.height)-cy-scrollTop+top
+                let ry = right-cx
+                let x = Math.floor(rx/W)
+                let y = Math.floor(ry/H)
+                return {x,y,rx,ry}
+            }
         },
         scrollLoop(){
             let {from,to,num,den,FPS} = this.frame
             if(this.freezeScroll){
                 let progress = num/den
                 let x = progress*to+(1-progress)*from
-                this.$refs['scroll-x'].scrollLeft = x
+                if(this.ltr){
+                    this.$refs['scroller'].scrollLeft = x
+                }else{
+                    let scrollHeight = parseInt(this.gridStyle.height)-this.$refs['scroller'].clientHeight
+                    this.$refs['scroller'].scrollTop = scrollHeight-x
+                }
                 if(num<den) this.frame.num++
             }
         },
@@ -113,12 +139,16 @@ export default {
             if(this.recording){
                 for(let note of this.activeNotes)
                     note.l = this.playX - note.x
+                this.$emit('tick')
             }else{
                 for(let note of this.notes){
                     if(note.x==this.playX){
                         this.triggerAttackRelease(note)
                         this.triggering.push(note)
-                    }else if(note.x+note.l==this.playX-1)
+                    }
+                }
+                for(let note of this.triggering){
+                    if(note.x+note.l==this.playX-1)
                         this.triggering =  this.triggering.filter(n=>n!=note)
                 }
             }
@@ -170,10 +200,11 @@ export default {
             let note = notes[y%12]+Math.floor((octave*12-y-1)/12)
             return note
         },
+        midi2grid(midi){return this.grid.octave*12-midi+11},
+        grid2midi(y){return this.grid.octave*12-y+11},
         grid2freq(y){
-            let { octave } = this.grid
-            let MIDINum = octave*12-y+11
-            let freq = 440*Math.pow(2,(MIDINum-69)/12)
+            let midi = this.grid2midi(y)
+            let freq = 440*Math.pow(2,(midi-69)/12)
             return Math.round(freq)
         },
         stepVelocity(velocity){
@@ -216,9 +247,8 @@ export default {
         generateID(){
             return '_' + Math.random().toString(36).substr(2, 9)
         },
-        pianoStart(y,v=60){
-            // this.activeNotes.map(n=>{n.a=false})
-            // this.activeNotes = []
+        pianoStart(midi,v=60){
+            let y = this.midi2grid(midi)
             let newNote = {
                 i:this.generateID(),
                 a:true,
@@ -233,7 +263,8 @@ export default {
                 this.notes.push(newNote)
             this.triggerAttack(newNote)
         },
-        pianoEnd(y){
+        pianoEnd(midi){
+            let y = this.midi2grid(midi)
             if(this.recording){
                 let idx = this.activeNotes.findIndex(n=>n.y==y)
                 if(idx==-1) return
@@ -375,9 +406,9 @@ export default {
                     this.addHistory()
                     this.notes = this.notes.filter(n=>n!=notes[0])
                 }else if(this.velociting){
-                    this.cursor = 'ns-resize'
+                    this.cursor = this.ltr?'ns-resize':'ew-resize'
                 }else if(dx<this.resizeBuffer||dx>notes[0].l*W-this.resizeBuffer||this.resizing)
-                    this.cursor = 'ew-resize'
+                    this.cursor = this.ltr?'ew-resize':'ns-resize'
                 else
                     this.cursor = 'auto'
             }else{
@@ -389,7 +420,7 @@ export default {
         handleEnd(e){
             if(this.recording){
                 for(let note in this.activeNotes)
-                    this.pianoEnd(note.y)
+                    this.pianoEnd(this.grid2midi(note.y))
             }else if(this.ranging){
                 let {sx,sy,ex,ey} = this.range
                 if(ex<sx) sx = [ex,ex=sx][0]
@@ -414,7 +445,7 @@ export default {
                 // this.notes.sort((a,b)=>a.x-b.x)
             }else{
                 for(let note in this.triggering)
-                    this.pianoEnd(note.y)
+                    this.pianoEnd(this.grid2midi(note.y))
             }
             this.deleting = false
             this.velociting = false
@@ -542,24 +573,40 @@ export default {
         },
         noteStyle(note){
             let {W,H} = this.grid
-            return {
+            return this.ltr?{
                 position: 'absolute',
+                background: note.a?'#FFA3A4':'#C4FACF',
+                opacity: (note.v/127)*0.5+0.5,
                 top: note.y*H+'px',
                 left: note.x*W+'px',
                 height: H-2+'px',
                 lineHeight: H-2+'px',
                 width: note.l*W-2+'px',
+            }:{
+                position: 'absolute',
                 background: note.a?'#FFA3A4':'#C4FACF',
                 opacity: (note.v/127)*0.5+0.5,
+                right: note.y*H+'px',
+                bottom: note.x*W+'px',
+                width: H-2+'px',
+                lineHeight: H-2+'px',
+                height: note.l*W-2+'px',
+                writingMode: 'vertical-lr',
             }
         },
         velStyle(note){
             let {W,H,vH} = this.grid
-            return {
+            return this.ltr?{
                 bottom:note.v/127*vH+'px',
                 left: note.x*W+'px',
                 width: note.l*W+'px',
                 height:'4px',
+                background: note.a?'#FFA3A4':'#C4FACF',
+            }:{
+                right:note.v/127*vH+'px',
+                bottom: note.x*W+'px',
+                height: note.l*W+'px',
+                width:'4px',
                 background: note.a?'#FFA3A4':'#C4FACF',
             }
         },
@@ -585,12 +632,9 @@ export default {
         ticks(){
             let {W,measure} = this.grid
             return Array.from(Array(measure).keys(),i=>{
-                return {
-                    style: {
-                        width: W*4+'px',
-                    },
-                    content: i+1,
-                }
+                return this.ltr?
+                    { style: { width: W*4+'px' }, content: i+1 }:
+                    { style: { height: W*4+'px' }, content: i+1 }
             })
         },
         beatSec(){
@@ -610,8 +654,13 @@ export default {
             let {W} = this.grid
             let x = this.playX*W-(this.playing?W:0)
             let duration = this.playing?this.beatSec:0
-            return {
+            return this.ltr?{
+                top: 0, left: 0, 
                 transform: `translateX(${x}px)`,
+                transition: `transform ${duration}s linear`,
+            }:{
+                bottom: 0, left: 0,
+                transform: `translateY(${-x}px)`,
                 transition: `transform ${duration}s linear`,
             }
         },
@@ -620,7 +669,7 @@ export default {
             if(ex<sx) sx = [ex,ex=sx][0]
             if(ey<sy) sy = [ey,ey=sy][0]
             let {W,H} = this.grid
-            return this.ranging?{
+            return this.ranging?this.ltr?{
                 position: 'absolute',
                 top: sy*H+'px',
                 left: sx*W+'px',
@@ -628,53 +677,69 @@ export default {
                 width: (ex-sx)*W+'px',
                 border: '5px dashed dodgerblue'
             }:{
+                position: 'absolute',
+                right: sy*H+'px',
+                bottom: sx*W+'px',
+                width: (ey-sy)*H+'px',
+                height: (ex-sx)*W+'px',
+                border: '5px dashed dodgerblue'
+            }:{
                 display: 'none'
             }
         },
         pianoGrids(){
-            let {H,octave} = this.grid
+            let {H,whiteKey,blackKey,octave} = this.grid
             let blacks = [1,3,5,8,10]
-            let accH = 0
+            let top = 0
             let len = octave*12
             return Array.from(Array(len).keys(),i=>{
                 let isBlack = blacks.includes(i%12)
                 let height = isBlack?H:i%12<7?H*7/4:H*5/3
-                let top = isBlack?-H/2-accH:-accH 
-                if(isBlack)
-                    accH+= height
+                if(i>0) top+= isBlack?H-height:height
                 let freq = this.grid2freq(i)
                 let isTriggered = this.triggering.some(n=>n.f==freq)
-                return {
+                return this.ltr?{
                     class: isTriggered?'bg-warning':isBlack?'bg-dark':'bg-light',
                     style:{
-                        position: 'relative',
-                        width: (isBlack?30:60)+'px',
-                        top: top+'px',
+                        width: (isBlack?blackKey:whiteKey)+'px',
+                        top: (isBlack?top+H:top)+'px',
+                        left: 0,
                         zIndex: isBlack?666:66,
                         boxShadow: isBlack?'2px 0 white':'0 -2px black',
                         height: height+'px',
                         lineHeight: height+'px',
                         textAlign: isBlack?'left':'right',
                         padding: '0px 4px',
-                        marginBottom:　(i==len-1)?-accH+'px':0,
                     },
                     content: isBlack?'':this.grid2note(i)
+                }:{
+                    class: isTriggered?'bg-warning':isBlack?'bg-dark':'bg-light',
+                    style:{
+                        height: (isBlack?blackKey+10:whiteKey)+'px',
+                        right: (isBlack?top+H:top)+'px',
+                        top: 0,
+                        zIndex: isBlack?666:66,
+                        boxShadow: isBlack?'':'2px 0 black',
+                        width: height+'px',
+                    },
+                    content: ''
                 }
             })
         },
         gridStyle(){
             let {H,W,octave,measure,beat} = this.grid
+            let ltr = this.ltr
             let pattern = (c1,px1,c2,px2,i)=>`${c1} ${px1*i}px, ${c1} ${px1*(i+1)-px2}px, ${c2} ${px1*(i+1)-px2}px, ${c2} ${px1*(i+1)}px`
             let thin = i=>pattern('transparent',W,'#42545F',1,i)
             let thick = i=>pattern('transparent',W,'#29373F',3,i)
             let black = i=>pattern('#394B56',H,'#29373F',2,i)
             let white = i=>pattern('#42545F',H,'#29373F',2,i)
             return {
-                width: W*4*measure+'px',
-                height: H*12*octave+'px',
+                width: (ltr?W*4*measure:H*12*octave)+'px',
+                height: (ltr?H*12*octave:W*4*measure)+'px',
                 background: 
-                    `repeating-linear-gradient(to right, ${thin(0)}, ${thin(1)}, ${thin(2)}, ${thick(3)}), `+
-                    `repeating-linear-gradient(to bottom, `+ 
+                    `repeating-linear-gradient(to ${ltr?'right':'top'}, ${thin(0)}, ${thin(1)}, ${thin(2)}, ${thick(3)}), `+
+                    `repeating-linear-gradient(to ${ltr?'bottom':'left'}, `+ 
                     `${white(0)}, ${black(1)}, ${white(2)}, ${black(3)}, ${white(4)}, ${black(5)}, ${white(6)}, ${white(7)}, ${black(8)}, ${white(9)}, ${black(10)}, ${white(11)})`
             }
         },
@@ -682,12 +747,15 @@ export default {
     mounted(){
         this.addHistory()
         // 互相綁定捲動事件
-        let scrollBundles = ['scroll-x','ticks','velocities']
+        let scrollBundles = ['scroller','ticks','velocities']
         for(let ref of scrollBundles){
             this.$refs[ref].addEventListener('scroll',()=>{
-                let {scrollLeft} = this.$refs[ref]
+                let {scrollLeft,scrollTop} = this.$refs[ref]
                 scrollBundles.filter(r=>r!=ref).map(r=>{
-                    this.$refs[r].scrollLeft = scrollLeft
+                    if(this.ltr)
+                        this.$refs[r].scrollLeft = scrollLeft
+                    else
+                        this.$refs[r].scrollTop = scrollTop
                 })
             })  
         }

@@ -1,7 +1,7 @@
 <template lang="pug">
-.table-responsive.d-flex
-    .position-relative(v-if="show" :style='{minWidth}')
-        .d-inline-block(v-for='(pk,pi) in pianoKeys' :key='pi' :style='pianoKeyStyle(pk)' 
+.btn-group
+    .position-relative(v-if="show")
+        .btn.p-0(v-for='(pk,pi) in pianoKeys' :key='pi' :style='pianoKeyStyle(pk)' 
             @mouseenter='handleEnter(pk)' @mouseleave='handleLeave(pk)')
             div(:style='charStyle(pk)') {{pk.char}}
     .h-100.btn-group-vertical.btn-group-sm
@@ -123,10 +123,6 @@ export default {
             pianoKey.press = false
         },
         pianoKeyStyle(pianoKey){
-            let common = {
-                cursor: 'pointer',
-                userSelect: 'none'
-            }
             return pianoKey.black?{
                 width: '20px',
                 height: '80px',
@@ -136,7 +132,6 @@ export default {
                 marginRight: '-10px',
                 zIndex: 99,
                 background: '#16FFBD',
-                ...common,
             }:{
                 width: '30px',
                 height: '120px',
@@ -144,7 +139,6 @@ export default {
                 zIndex: 69,
                 border: '1px solid #eee',
                 background: '#333333',
-                ...common
             }
         },
         charStyle(pianoKey){
@@ -156,11 +150,6 @@ export default {
                 color: pianoKey.press?'white':'grey'
             }
         }
-    },
-    computed:{
-        minWidth(){
-            return this.pianoKeys.filter(k=>!k.black).length*30+'px'
-        },  
     },
     mounted(){
         this.events = {

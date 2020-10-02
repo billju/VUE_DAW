@@ -16,7 +16,7 @@
 <script>
 export default {
     data:()=>({
-        events: {}, mouse:{active:false,pianoKey:null}, show: true, octave: 4,
+        events: {}, mouse:{active:false,pianoKey:null}, show: false, octave: 4,
     }),
     props:{
         pianoKeys: {

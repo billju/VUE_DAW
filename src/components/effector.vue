@@ -1,13 +1,9 @@
 <template lang="pug">
-.btn-group.btn-group-sm
+.btn-group.btn-group-sm.position-relative
     select.btn.btn-outline-primary(v-model="effect" @change="setEffect(effect)") {{effect}}
         option(v-for="e in effects" :key="e.name" :value="e.name") {{e.name}}
-    .position-relative
-        .position-absolute.bg-dark.text-light.pb-4.px-2.shadow(v-if="knobs.length" style="z-index:666")
-            .text-left {{effect.toUpperCase()}}
-            .w-100.border.mb-3
-            .d-flex
-                Knob.mx-3(v-for="k,ki in knobs" :key="ki" :min="k.min" :max="k.max" v-model="k.value" @input="k.set($event)" :label="k.label" :size="40")
+    .d-flex.position-absolute.bg-dark.text-light.px-1(v-if="knobs.length" style="left:100%;z-index:666")
+        Knob.mx-1(v-for="k,ki in knobs" :key="ki" :min="k.min" :max="k.max" v-model="k.value" @input="k.set($event)" :label="k.label" :size="30" :bottom="false")
 </template>
 
 <script>
@@ -225,8 +221,7 @@ export default {
         setEffect(effect){
             let idx = this.effects.findIndex(e=>e.name==effect)
             if(idx!==-1){
-                for(let v in this.sampler)
-                    this.sampler[v].disconnect(this.engine)
+                this.sampler.disconnect(this.engine)
                 let Engine = this.effects[idx].engine
                 this.engine = new Engine().toDestination()
                 // create knobx
@@ -245,9 +240,7 @@ export default {
                             this.engine.set(prop)
                         }
                     })
-                
-                for(let v in this.sampler)
-                    this.sampler[v].connect(this.engine)
+                this.sampler.connect(this.engine)
             }
         }
     },

@@ -41,13 +41,13 @@ export default {
                     let i = this.generateID()
                     let x = Math.round(note.time/beatSec)
                     let y = 8*12-note.midi+11 // C0 = 12
-                    let l = Math.round(note.duration/beatSec)
+                    let l = Math.ceil(note.duration/beatSec)
                     let f = Math.round(440*Math.pow(2,(note.midi-69)/12))
                     let v = note.velocity*127
                     notes.push({a,i,x,y,l,v,f})
                 }
             }
-            notes = notes.filter(n=>n.x+n.l<720)
+            notes = notes//.filter(n=>n.x+n.l<720)//.sort((a,b)=>a.x-b.x)
             this.$emit('setNotes',notes)
         },
         encodeMIDI(bpm,notes){

@@ -1,11 +1,12 @@
 <template lang="pug">
-div(:style='containerStyle' @mousedown='handleEventStart' @touchstart='handleEventStart')
-	div(:style='dialStyle')
-		div(:style='pointerStyle')
-	svg.w-100.h-100(viewBox='0 0 100 100')
-		path(:style='pathStyle' d='M20,76 A 40 40 0 1 1 80 76' stroke='#333333' fill='none')
-		path(:style='pathStyle' d='M20,76 A 40 40 0 1 1 80 76' stroke='#16FFBD' :stroke-dashoffset='Math.round(184-pct*184)' fill='none')
-	div(:style='labelStyle' :title="value") {{label}}
+.d-flex.align-items-center
+	.position-relative(:style="containerStyle" @mousedown="handleEventStart" @touchstart="handleEventStart")
+		div(:style="dialStyle")
+			.position-absolute(:style="pointerStyle")
+		svg.w-100.h-100(viewBox="0 0 100 100")
+			path(:style="pathStyle" d="M20,76 A 40 40 0 1 1 80 76" stroke="#333333" fill="none")
+			path(:style="pathStyle" d="M20,76 A 40 40 0 1 1 80 76" stroke="#16FFBD" :stroke-dashoffset="Math.round(184-pct*184)" fill="none")
+	span(:title="value") {{label}}
 </template>
 
 <script>
@@ -21,6 +22,7 @@ export default {
 		value:{type:Number,default:0.5},
 		label:{type:String,default:''},
 		size:{type:Number,default:100},
+		bottom:{type:Boolean,default:true},
 	},
 	methods:{
 		getCoord(e){
@@ -63,8 +65,7 @@ export default {
 			return{
 				width: `${this.size}px`,
 				height: `${this.size}px`,
-				position: 'relative',
-				display: 'inline-block',
+				flexDirection: this.bottom?'column':'row',
 				cursor: 'pointer',
 			}
 		},
@@ -89,16 +90,6 @@ export default {
 				top: '15%',
 				left: '50%',
 				background: '#fff',
-			}
-		},
-		labelStyle(){
-			return {
-				position: 'absolute',
-				color: '#fff',
-				bottom: '-20px',
-				textAlign: 'center',
-				left: '50%',
-				transform: 'translateX(-50%)'
 			}
 		},
 		pathStyle(){

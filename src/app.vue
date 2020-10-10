@@ -27,12 +27,13 @@
             .btn.btn-outline-secondary(@click="PR.randomVelocity()") random velocity
             Pitch(ref="pitch" @noteOn="PR.pianoStart($event)" @noteOff="PR.pianoEnd($event)")
             //- import, export
-            MIDI(ref="midi" @setNotes="setNotes($event)" 
+            MIDI(ref="midi" @decode="importMIDI($event)" 
                 @noteOn="PR.pianoStart($event.midi,$event.velocity)" 
                 @noteOff="PR.pianoEnd($event.midi)")
             .btn.btn-outline-secondary(@click="$refs['midi'].encodeMIDI(bpm,PR.notes)") export
-            Effector(ref="effector" :sampler="sampler")
-    PianoRoll(ref="pianoRoll" :bpm="bpm" :sampler="sampler" @mic-sample="$refs['pitch'].sample()" :drum="drum")
+            .btn.btn-outline-secondary(v-for="track,ti in tracks" :key="track.name" :class="ti==trackIndex?'active':''" @click="trackIndex=ti") {{track.name}}
+            Effector(v-if="tracks.length" :key="trackIndex" :source="tracks[trackIndex].instrument")
+    PianoRoll(ref="pianoRoll" :bpm="bpm" :tracks="tracks" :trackIndex="trackIndex" @mic-sample="$refs['pitch'].sample()" @metronome="metronome.triggerAttackRelease($event,'8n')" @notes="tracks[trackIndex].notes=$event")
     .position-fixed(style="top:0;right:0")
         PianoKeyboard(@noteOn="PR.pianoStart($event.midi)" @noteOff="PR.pianoEnd($event.midi)")
 </template>
@@ -42,7 +43,6 @@ import ADSR from './components/ADSR'
 import PianoRoll from './components/piano-roll'
 import PianoKeyboard from './components/piano-keyboard'
 import Knob from './components/knob'
-import exportMixin from './mixins/exportMixin'
 import MIDI from './components/midi'
 import Effector from './components/effector'
 import Pitch from './components/pitch'
@@ -50,11 +50,11 @@ import Pitch from './components/pitch'
 export default {
     name: 'App',
     components: {PianoRoll,PianoKeyboard,Knob,ADSR,MIDI,Effector,Pitch},
-    mixins: [exportMixin],
     data:()=>({
         events: {}, bpm: 132, 
         PR: {histories:[]}, 
         sampler: {}, drum: {}, synth: {},
+        trackIndex: 0, tracks: [],
         tempoDict: {
             Largo: 40,
             Adagio: 66,
@@ -85,10 +85,37 @@ export default {
             let v = this.stepVelocity(note.v)
             this.sampler[v].triggerRelease(note.f)
         },
-        setNotes(notes){
-            let maxX = Math.max(...notes.map(n=>n.x))
+        importMIDI(notes){
+            let maxX = Math.max(...notes.map(n=>n.x+n.l))
             this.PR.grid.measure = Math.ceil(maxX/4)+1
-            this.PR.notes=notes
+            // set notes
+            this.PR.tracks[this.trackIndex].notes = notes
+        },
+        getPianoUrls(){
+            // A0v1~A7v16, C1v1~C8v16 Ds1v7~Ds7v16 Fs1v1~Fs7v16
+            const octs = {A:[0,7],C:[1,8],Ds:[1,7],Fs:[1,7]}
+            let entries = []
+            for(let velocity of [5,10,15]){
+                for(let note in octs){
+                    let [min,max] = octs[note]
+                    for(let i=min;i<=max;i++){
+                        let key = `${note}${i}v${velocity}`
+                        let entry = [key.replace('s','#'),`${key}.mp3`]
+                        entries.push(entry)
+                    }
+                }
+            }
+            return Object.fromEntries(entries)
+        },
+        getDrumUrls(){
+            return {
+                'C2':'kick.wav',
+                'D2':'snare.wav',
+                'G#2':'hihat.wav',
+                'B2':'tom1.wav',
+                'A2':'tom2.wav',
+                'G2':'tom3.wav',                
+            }
         },
     },
     computed:{
@@ -103,55 +130,31 @@ export default {
     },
     mounted(){
         this.PR = this.$refs['pianoRoll']
-        this.synth = new Tone.PolySynth(Tone.Synth, {
+        // init instruments
+        let synth = new Tone.PolySynth(Tone.Synth, {
             oscillator:{type:'square8'}
         })
-
-        // A0v1~A7v16, C1v1~C8v16 Ds1v7~Ds7v16 Fs1v1~Fs7v16
-        const octs = {A:[0,7],C:[1,8],Ds:[1,7],Fs:[1,7]}
-        let entries = []
-        for(let velocity of [5,10,15]){
-            for(let note in octs){
-                let [min,max] = octs[note]
-                for(let i=min;i<=max;i++){
-                    let key = `${note}${i}v${velocity}`
-                    let entry = [key.replace('s','#'),`${key}.mp3`]
-                    entries.push(entry)
-                }
-            }
-        }
-        this.sampler = new Tone.Sampler({
-            urls: Object.fromEntries(entries),
-            baseUrl: 'http://localhost:5500/sounds/piano-samples/',
+        let piano = new Tone.Sampler({
+            urls: this.getPianoUrls(),
+            baseUrl: 'piano-samples/',
             release: 1,
-            onload: ()=>{
-                this.$refs['effector'].setEffect('效果器')
-            },
         })
-        this.drum = new Tone.Sampler({
-            urls: {
-                'C2':'kick.wav',
-                'D2':'snare.wav',
-                'G#2':'hihat.wav',
-                'B2':'tom1.wav',
-                'A2':'tom2.wav',
-                'G2':'tom3.wav',
-                'F5':'../808/claves.wav',
-            },
-            baseUrl: 'http://localhost:5500/sounds/drum/acoustic-kit/',
+        let drum = new Tone.Sampler({
+            urls: this.getDrumUrls(),
+            baseUrl: 'drum/acoustic-kit/',
             release: 1
+        })
+        
+        this.tracks = [
+            {name:'piano', rgb:[196,250,207], instrument: piano, notes: [], histories:[], historyIdx:0},
+            {name:'synth', rgb:[196,250,207], instrument: synth, notes: [], histories:[], historyIdx:0},
+            {name:'drum', rgb:[196,250,207], instrument: drum, notes: [], histories:[], historyIdx:0},
+        ]
+        this.metronome = new Tone.Sampler({
+            urls: {'F5':'808/claves.wav'},
+            baseUrl: 'drum/',
+            release: 1,
         }).toDestination()
-
-        // 事件
-        this.events = {
-            
-        }
-        for(let name in this.events)
-            window.addEventListener(name,this.events[name])
-    },
-    beforeDestroy(){
-        for(let name in this.events)
-            window.removeEventListener(name,this.events[name])
     },
 }
 </script>

@@ -25,14 +25,8 @@ export default {
     components: {Knob},
     data:()=>({
         events: {},
-        knobs: [], effect: '效果器', engine: Tone.Gain,
+        knobs: [], effect: 'Gain', engine: Tone.Gain,
         effects: [
-            {
-                name: '效果器',
-                engine: Tone.Gain,
-                knobs: {},
-                menus: {},
-            },
             {
                 name: 'Gain',
                 engine: Tone.Gain,
@@ -215,13 +209,13 @@ export default {
     }),
     props:{
         // effect: {type:String,default:'Reverb'},
-        sampler: {type:Object},
+        source: {type:Object},
     },
     methods:{
         setEffect(effect){
             let idx = this.effects.findIndex(e=>e.name==effect)
             if(idx!==-1){
-                this.sampler.disconnect(this.engine)
+                this.source.disconnect(this.engine)
                 let Engine = this.effects[idx].engine
                 this.engine = new Engine().toDestination()
                 // create knobx
@@ -240,15 +234,12 @@ export default {
                             this.engine.set(prop)
                         }
                     })
-                this.sampler.connect(this.engine)
+                this.source.connect(this.engine)
             }
         }
     },
-    computed:{
-        
-    },
     mounted(){
-        
+        this.setEffect('Gain')
     },
 }
 </script>

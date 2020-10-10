@@ -1,6 +1,7 @@
 /node_modules
 /.cache
 /dist
+/build
 /sounds/impulse-responses
 /sounds/piano-samples/*v1.mp3
 /sounds/piano-samples/*v2.mp3

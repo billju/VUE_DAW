@@ -33,8 +33,7 @@ export default {
             const beatSec = 60/bpm/4
             let notes = []
             for(let track of midi.tracks){
-                if(track.name=='Drums') continue
-                // console.log(track.name)
+                console.log(track)
                 // let { number, family, name, percussion } = track.instrument
                 for(let note of track.notes){
                     let a = false
@@ -44,11 +43,11 @@ export default {
                     let l = Math.ceil(note.duration/beatSec)
                     let f = Math.round(440*Math.pow(2,(note.midi-69)/12))
                     let v = note.velocity*127
-                    notes.push({a,i,x,y,l,v,f})
+                    let t = track.name
+                    notes.push({a,i,x,y,l,v,f,t})
                 }
             }
-            notes = notes//.filter(n=>n.x+n.l<720)//.sort((a,b)=>a.x-b.x)
-            this.$emit('setNotes',notes)
+            this.$emit('decode',notes)
         },
         encodeMIDI(bpm,notes){
             let midi = new Midi()

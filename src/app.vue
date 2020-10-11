@@ -107,12 +107,28 @@ export default {
         },
         getDrumUrls(){
             return {
-                'C2':'kick.wav',
-                'D2':'snare.wav',
-                'G#2':'hihat.wav',
-                'B2':'tom1.wav',
-                'A2':'tom2.wav',
-                'G2':'tom3.wav',                
+                'A2':'A2.mp3',
+                'A#2':'As2.mp3',
+                'B1':'B1.mp3',
+                'B2':'B2.mp3',
+                'C2':'C2.mp3',
+                'C4':'C4.mp3',
+                'C#2':'Cs2.mp3',
+                'C#3':'Cs3.mp3',
+                'C#4':'Cs4.mp3',
+                'D2':'D2.mp3',
+                'D4':'D4.mp3',
+                'D#2':'Ds2.mp3',
+                'D#3':'Ds3.mp3',
+                'D#4':'Ds4.mp3',
+                'E2':'E2.mp3',
+                'E3':'E3.mp3',
+                'E4':'E4.mp3',
+                'F#2':'Fs2.mp3', 
+                'F3':'F3.mp3',
+                'G2':'G2.mp3',
+                'G3':'G3.mp3',
+                'G#2':'Gs2.mp3',
             }
         },
     },
@@ -139,7 +155,7 @@ export default {
         })
         let drum = new Tone.Sampler({
             urls: this.getDrumUrls(),
-            baseUrl: 'drum/acoustic-kit/',
+            baseUrl: 'drum/acoustic/',
             release: 1
         })
         
@@ -156,7 +172,7 @@ export default {
         ]
         
         this.metronome = new Tone.Sampler({
-            urls: {'F5':'808/claves.wav'},
+            urls: {'F5':'metronome.mp3'},
             baseUrl: 'drum/',
             release: 1,
         }).toDestination()

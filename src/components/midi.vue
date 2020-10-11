@@ -31,10 +31,11 @@ export default {
             const midi = await new Midi(buffer)
             const bpm = midi.header.tempos[0].bpm
             const beatSec = 60/bpm/4
-            let notes = []
+            let tracks = []
             for(let track of midi.tracks){
-                console.log(track)
+                // console.log(track)
                 // let { number, family, name, percussion } = track.instrument
+                let newTrack = {notes: []}
                 for(let note of track.notes){
                     let a = false
                     let i = this.generateID()
@@ -43,11 +44,11 @@ export default {
                     let l = Math.ceil(note.duration/beatSec)
                     let f = Math.round(440*Math.pow(2,(note.midi-69)/12))
                     let v = note.velocity*127
-                    let t = track.name
-                    notes.push({a,i,x,y,l,v,f,t})
+                    newTrack.notes.push({a,i,x,y,l,v,f})
                 }
+                tracks.push(newTrack)
             }
-            this.$emit('decode',notes)
+            this.$emit('decode', tracks)
         },
         encodeMIDI(bpm,notes){
             let midi = new Midi()

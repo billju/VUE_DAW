@@ -85,11 +85,9 @@ export default {
             let v = this.stepVelocity(note.v)
             this.sampler[v].triggerRelease(note.f)
         },
-        importMIDI(notes){
-            let maxX = Math.max(...notes.map(n=>n.x+n.l))
-            this.PR.grid.measure = Math.ceil(maxX/4)+1
-            // set notes
-            this.PR.tracks[this.trackIndex].notes = notes
+        importMIDI(tracks){
+            for(let i=0;i<tracks.length;i++)
+                this.tracks[i].notes = tracks[i].notes
         },
         getPianoUrls(){
             // A0v1~A7v16, C1v1~C8v16 Ds1v7~Ds7v16 Fs1v1~Fs7v16
@@ -145,11 +143,18 @@ export default {
             release: 1
         })
         
+        const CMAP = {
+            red:[255, 163, 164], pink:[249, 196, 250],
+            green: [196,250,207], yellow: [250, 250, 196],
+            blue: [196, 238, 250], purple: [206, 196, 250]
+        }
         this.tracks = [
-            {name:'piano', rgb:[196,250,207], instrument: piano, notes: [], histories:[], historyIdx:0},
-            {name:'synth', rgb:[196,250,207], instrument: synth, notes: [], histories:[], historyIdx:0},
-            {name:'drum', rgb:[196,250,207], instrument: drum, notes: [], histories:[], historyIdx:0},
+            {name:'pianoR', rgb:CMAP.green, instrument: piano, notes: [], histories:[], historyIdx:0},
+            {name:'pianoL', rgb:CMAP.purple, instrument: piano, notes: [], histories:[], historyIdx:0},
+            {name:'synth', rgb:CMAP.yellow, instrument: synth, notes: [], histories:[], historyIdx:0},
+            {name:'drum', rgb:CMAP.blue, instrument: drum, notes: [], histories:[], historyIdx:0},
         ]
+        
         this.metronome = new Tone.Sampler({
             urls: {'F5':'808/claves.wav'},
             baseUrl: 'drum/',

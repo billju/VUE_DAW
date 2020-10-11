@@ -21,8 +21,9 @@
                 :style="ltr?{height:gridStyle.height,width:0}:{width:gridStyle.width,height:0}" 
                 @wheel="handleWheel($event)" @mousedown="handleStart($event)")
             .position-relative.overflow-hidden(:style="gridStyle")
-                transition-group(name="fade")
-                    small.text-center(v-for="note in scrollerNotes" :key="note.i" :style="noteStyle(note)") {{note.l*grid.W>30&&grid.H>14?grid2note(note.y):''}}
+                template(v-for="track in scrollerTracks")
+                    transition-group(name="fade")
+                        small.text-center(v-for="note in track.notes" :key="note.i" :style="noteStyle(note,track)") {{note.l*grid.W>30&&grid.H>14?grid2note(note.y):''}}
                 .position-absolute(:style="rangeStyle")
                 .position-absolute.border.border-warning(:class="ltr?'h-100':'w-100'" :style="cursorStyle")
                 transition-group(name="fade")
@@ -36,7 +37,8 @@
             .position-relative(
                 :style="ltr?{width:gridStyle.width,height:grid.vH+4+'px'}:{width:grid.vH+4+'px',height:gridStyle.height}" 
                     @mousedown="velociting=true;setVelocity($event)")
-                .position-absolute(v-for="note in scrollerNotes" :key="note.i" :style="velStyle(note)")
+                template(v-for="track in scrollerTracks")
+                    .position-absolute(v-for="note in track.notes" :key="note.i" :style="velStyle(note,track)")
 </template>
 
 <script>
@@ -46,7 +48,7 @@ export default {
     data:()=>({
         // width height  八度 小節
         grid: {W:20,H:20,octave:8,measure:32,beat:4,vH:48,blackKey:30,whiteKey:60},
-        ltr: true, metronome: false, scrollTop:0, scrollLeft: 0,
+        ltr: false, metronome: false, scrollTop:0, scrollLeft: 0,
         lastNote: {a:false,x:0,y:0,l:1,f:440,v:30},
         // active grid-x grid-y length frequency velocity delay
         chordType: 'mono',
@@ -104,7 +106,7 @@ export default {
         getGrid(cx,cy){
             let {scrollLeft,scrollTop} = this.$refs['scroller']
             let {top,left,right} = this.$refs['scroller'].getBoundingClientRect()
-            let {W,H,octave,measure} = this.grid
+            let {W,H,octave} = this.grid
             if(this.ltr){
                 let rx = cx-left+scrollLeft
                 let ry = cy-top
@@ -120,8 +122,8 @@ export default {
             }
         },
         checkMovable(dx,dy){
-            let {octave,measure} = this.grid
-            let xs = this.activeNotes.map(n=>n.x+dx).every(x=>0<=x&&x<measure*4)
+            let {octave} = this.grid
+            let xs = this.activeNotes.map(n=>n.x+dx).every(x=>0<=x&&x<this.measure*4)
             let ys = this.activeNotes.map(n=>n.y+dy).every(y=>0<=y&&y<octave*12)
             return xs&&ys
         },
@@ -301,8 +303,8 @@ export default {
                     this.triggerRelease(n)
                     n.f = this.grid2freq(n.y)
                 })
-                let measure = Math.ceil(this.endX/4)+1
-                if(measure>this.grid.measure) this.grid.measure = measure
+                // let measure = Math.ceil(this.endX/4)+1
+                // if(measure>this.grid.measure) this.grid.measure = measure
                 // this.notes.sort((a,b)=>a.x-b.x)
             }else{
                 for(let note in this.triggering)
@@ -329,7 +331,7 @@ export default {
             }
         },
         playLoop(){
-            let {measure,W} = this.grid
+            let {W,beat} = this.grid
             // animation first
             this.frame = {
                 from: this.playX*W,
@@ -353,24 +355,22 @@ export default {
                     note.l = this.playX - note.x
                 this.$emit('mic-sample')
             }else{
-                for(let note of this.notes){
-                    if(note.x==this.playX){
-                        let isDrum = false
-                        // let drums = {36:'C2',38:'D2',44:'G#2',43:'G2',45:'A2',47:'B2'}
-                        // let midi = this.grid2midi(note.y)
-                        // for(let key in drums){if(midi==key){this.drum.triggerAttackRelease(drums[key],'8n',undefined,note.v/127);isDrum=true;break;}}
-                        if(!isDrum){
-                            this.triggerAttackRelease(note)
+                for(let track of this.tracks){
+                    for(let note of track.notes){
+                        if(note.x==this.playX){
+                            let duration = note.l*this.beatSec
+                            track.instrument.triggerAttackRelease(note.f,duration,undefined,note.v/127)
                             this.triggering.push(note)
                         }
                     }
-                }
-                for(let note of this.triggering){
-                    if(note.x+note.l==this.playX-1)
-                        this.triggering = this.triggering.filter(n=>n!=note)
+                    for(let note of this.triggering){
+                        if(note.x+note.l==this.playX-1)
+                            this.triggering = this.triggering.filter(n=>n!=note)
+                    }
                 }
             }
-            if(this.metronome&&this.playX%4==0) this.$emit('metronome',this.playX%16==0?'F5':'F4')
+            // emit metronome
+            if(this.metronome&&this.playX%beat==0) this.$emit('metronome',this.playX%(beat*4)==0?'F5':'F4')
         },
         record(){
             for(let note of this.activeNotes)
@@ -383,6 +383,7 @@ export default {
         play(){
             if(this.playing) return
             this.playing = true
+            if(this.freezeScroll) this.playX = this.scrollBound.minX
             this.playLoop()
             this.scrollInterval = setInterval(()=>{this.scrollLoop()},1000/this.frame.FPS)
         },
@@ -415,17 +416,13 @@ export default {
             this.instrument.triggerRelease(note.f)
             this.triggering =  this.triggering.filter(n=>n!=note)
         },
-        triggerAttackRelease(note){
-            let duration = note.l*this.beatSec
-            this.instrument.triggerAttackRelease(note.f,duration,undefined,note.v/127)
-        },
         triggerSelection(shouldRelease=true){
             if(!this.activeNotes.length) return
             let firstNote = this.activeNotes[0]
             if(!this.activeNotes.every(n=>n.x==firstNote.x)) return
             for(let note of this.activeNotes){
                 if(shouldRelease)
-                    this.triggerAttackRelease(note)
+                    this.instrument.triggerAttackRelease(note.f,'8n',undefined,note.v/127)
                 else
                     this.triggerAttack(note)
             }
@@ -605,11 +602,11 @@ export default {
             }
         },
         // styles
-        noteStyle(note){
+        noteStyle(note, track){
             let {W,H} = this.grid
+            let [r,g,b] = track.rgb
             let alpha = (note.v/127)*0.5+0.5
             let activeColor = `rgba(255, 163, 164, ${alpha})`
-            let [r,g,b] = [196,250,207]
             let bgc = note.a?activeColor:`rgba(${r}, ${g}, ${b}, ${alpha})`
             return this.ltr?{
                 position: 'absolute',
@@ -630,7 +627,7 @@ export default {
                 writingMode: 'vertical-lr',
             }
         },
-        velStyle(note){
+        velStyle(note, track){
             let {W,H,vH} = this.grid
             return this.ltr?{
                 bottom:note.v/127*vH+'px',
@@ -662,23 +659,30 @@ export default {
         instrument(){
             return this.tracks[this.trackIndex].instrument
         },
-        scrollerNotes(){
+        scrollBound(){
             let {clientWidth,clientHeight} = this.$refs['scroller']??{}
             let { W } = this.grid
             if(this.ltr){
                 let minX = Math.floor(this.scrollLeft/W)
                 let maxX = Math.ceil((this.scrollLeft+clientWidth)/W)
-                return this.notes.filter(n=>minX<=n.x+n.l&&n.x<=maxX)
+                return {minX, maxX}
             }else{
                 let scrollBottom = parseInt(this.gridStyle.height)-this.scrollTop
                 let minX = Math.floor((scrollBottom-clientHeight)/W)
                 let maxX = Math.ceil(scrollBottom/W)
-                return this.notes.filter(n=>minX<=n.x+n.l&&n.x<=maxX)
+                return {minX, maxX}
             }
         },
+        scrollerTracks(){
+            let {minX, maxX} = this.scrollBound
+            return this.tracks.map(track=>({
+                ...track,
+                notes: track.notes.filter(n=>minX<=n.x+n.l&&n.x<=maxX)
+            }))
+        },
         ticks(){
-            let {W,measure} = this.grid
-            return Array.from(Array(measure).keys(),i=>{
+            let {W} = this.grid
+            return Array.from(Array(this.measure).keys(),i=>{
                 return this.ltr?
                     { style: { width: W*4+'px' }, content: i+1 }:
                     { style: { height: W*4+'px' }, content: i+1 }
@@ -691,11 +695,14 @@ export default {
             return Math.round(sec*floatPoint)/floatPoint
         },
         endX(){
-            let {beat,measure} = this.grid
-            if(this.recording) return measure*beat
-            let endX = Math.max(...this.notes.map(n=>n.x+n.l))
+            let {beat} = this.grid
+            let endX = Math.max(...this.tracks.flatMap(track=>track.notes.map(n=>n.x+n.l)))
             endX = Math.ceil(endX/beat)*beat+1
             return endX
+        },
+        measure(){
+            let measure = Math.ceil(this.endX/this.grid.beat)
+            return measure<32?32:measure
         },
         cursorStyle(){
             let {W} = this.grid
@@ -774,7 +781,7 @@ export default {
             })
         },
         gridStyle(){
-            let {H,W,octave,measure,beat} = this.grid
+            let {H,W,octave,beat} = this.grid
             let ltr = this.ltr
             let pattern = (c1,px1,c2,px2,i)=>`${c1} ${px1*i}px, ${c1} ${px1*(i+1)-px2}px, ${c2} ${px1*(i+1)-px2}px, ${c2} ${px1*(i+1)}px`
             let thin = i=>pattern('transparent',W,'#42545F',1,i)
@@ -782,8 +789,8 @@ export default {
             let black = i=>pattern('#394B56',H,'#29373F',2,i)
             let white = i=>pattern('#42545F',H,'#29373F',2,i)
             return {
-                width: (ltr?W*4*measure:H*12*octave)+'px',
-                height: (ltr?H*12*octave:W*4*measure)+'px',
+                width: (ltr?W*4*this.measure:H*12*octave)+'px',
+                height: (ltr?H*12*octave:W*4*this.measure)+'px',
                 background: 
                     `repeating-linear-gradient(to ${ltr?'right':'top'}, ${thin(0)}, ${thin(1)}, ${thin(2)}, ${thick(3)}), `+
                     `repeating-linear-gradient(to ${ltr?'bottom':'left'}, `+ 
@@ -793,6 +800,7 @@ export default {
     },
     mounted(){
         this.addHistory()
+        this.ltr = true // 觸發scrollerTracks
         // 互相綁定捲動事件
         let scrollBundles = ['scroller','ticks','velocities']
         for(let ref of scrollBundles){

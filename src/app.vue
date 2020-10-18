@@ -65,6 +65,11 @@ export default {
             Presto: 168,
             Prestissimo: 200,
         },
+        CMAP:{
+            red:[255, 163, 164], pink:[249, 196, 250],
+            green: [196,250,207], yellow: [250, 250, 196],
+            blue: [196, 238, 250], purple: [206, 196, 250]
+        },
         processor: ['Arpeggio','Legato','Staccato','Ornaments','Vibrato','Pizzicato','Glissando']
     }),
     props:{
@@ -86,8 +91,17 @@ export default {
             this.sampler[v].triggerRelease(note.f)
         },
         importMIDI(tracks){
-            for(let i=0;i<tracks.length;i++)
-                this.tracks[i].notes = tracks[i].notes
+            for(let track of this.tracks) track.notes = []
+            let mainPiano = false
+            for(let track of tracks){
+                console.log(track)
+                if(track.family=='piano'){
+                    if(mainPiano) this.tracks[1].notes.push(...track.notes)
+                    else this.tracks[0].notes.push(...track.notes)
+                    mainPiano = true
+                }
+                if(track.family=='drums') this.tracks[3].notes.push(...track.notes)
+            }
         },
         getPianoUrls(){
             // A0v1~A7v16, C1v1~C8v16 Ds1v7~Ds7v16 Fs1v1~Fs7v16
@@ -109,7 +123,7 @@ export default {
             return {
                 'A2':'A2.mp3',
                 'A#2':'As2.mp3',
-                'B1':'B1.mp3',
+                'B1':'C2.mp3',
                 'B2':'B2.mp3',
                 'C2':'C2.mp3',
                 'C4':'C4.mp3',
@@ -124,7 +138,7 @@ export default {
                 'E2':'E2.mp3',
                 'E3':'E3.mp3',
                 'E4':'E4.mp3',
-                'F#2':'Fs2.mp3', 
+                'F#2':'Gs2.mp3', 
                 'F3':'F3.mp3',
                 'G2':'G2.mp3',
                 'G3':'G3.mp3',
@@ -142,9 +156,7 @@ export default {
             return keys[keys.length-1]
         },
     },
-    mounted(){
-        this.PR = this.$refs['pianoRoll']
-        // init instruments
+    created(){
         let synth = new Tone.PolySynth(Tone.Synth, {
             oscillator:{type:'square8'}
         })
@@ -158,24 +170,20 @@ export default {
             baseUrl: 'drum/acoustic/',
             release: 1
         })
-        
-        const CMAP = {
-            red:[255, 163, 164], pink:[249, 196, 250],
-            green: [196,250,207], yellow: [250, 250, 196],
-            blue: [196, 238, 250], purple: [206, 196, 250]
-        }
         this.tracks = [
-            {name:'pianoR', rgb:CMAP.green, instrument: piano, notes: [], histories:[], historyIdx:0},
-            {name:'pianoL', rgb:CMAP.purple, instrument: piano, notes: [], histories:[], historyIdx:0},
-            {name:'synth', rgb:CMAP.yellow, instrument: synth, notes: [], histories:[], historyIdx:0},
-            {name:'drum', rgb:CMAP.blue, instrument: drum, notes: [], histories:[], historyIdx:0},
+            {name:'piano1', rgb:this.CMAP.green, instrument: piano, notes: [], histories:[], historyIdx:0},
+            {name:'piano2', rgb:this.CMAP.purple, instrument: piano, notes: [], histories:[], historyIdx:0},
+            {name:'synth', rgb:this.CMAP.yellow, instrument: synth, notes: [], histories:[], historyIdx:0},
+            {name:'drum', rgb:this.CMAP.blue, instrument: drum, notes: [], histories:[], historyIdx:0},
         ]
-        
         this.metronome = new Tone.Sampler({
             urls: {'F5':'metronome.mp3'},
             baseUrl: 'drum/',
             release: 1,
         }).toDestination()
+    },
+    mounted(){
+        this.PR = this.$refs['pianoRoll']
     },
 }
 </script>

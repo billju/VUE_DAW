@@ -34,8 +34,8 @@ export default {
             let tracks = []
             for(let track of midi.tracks){
                 // console.log(track)
-                // let { number, family, name, percussion } = track.instrument
-                let newTrack = {notes: []}
+                let { number, family, name, percussion } = track.instrument
+                let newTrack = {notes: [], family}
                 for(let note of track.notes){
                     let a = false
                     let i = this.generateID()

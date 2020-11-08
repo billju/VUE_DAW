@@ -33,8 +33,11 @@
             .btn.btn-outline-secondary(@click="$refs['midi'].encodeMIDI(bpm,PR.notes)") export
             .btn.btn-outline-secondary(v-for="track,ti in tracks" :key="track.name" :class="ti==trackIndex?'active':''" @click="trackIndex=ti") {{track.name}}
             Effector(v-if="tracks.length" :key="trackIndex" :source="tracks[trackIndex].instrument")
-    PianoRoll(ref="pianoRoll" :bpm="bpm" :tracks="tracks" :trackIndex="trackIndex" @mic-sample="$refs['pitch'].sample()" @metronome="metronome.triggerAttackRelease($event,'8n')" @notes="tracks[trackIndex].notes=$event")
-    .position-fixed(style="top:0;right:0")
+    PianoRoll(
+        ref="pianoRoll" :bpm="bpm" :tracks="tracks" :trackIndex="trackIndex" @mic-sample="$refs['pitch'].sample()"
+        @metronome="metronome.triggerAttackRelease($event,'8n')" @notes="tracks[trackIndex].notes=$event"
+    )
+    .position-fixed(style="top:0;right:20px")
         PianoKeyboard(@noteOn="PR.pianoStart($event.midi)" @noteOff="PR.pianoEnd($event.midi)")
 </template>
 <script>
@@ -81,14 +84,6 @@ export default {
                 if(velocity<v*8)
                     return v
             return v
-        },
-        triggerAttack(note){
-            let v = this.stepVelocity(note.v)
-            this.sampler[v].triggerAttack(note.f)
-        },
-        triggerRelease(note){
-            let v = this.stepVelocity(note.v)
-            this.sampler[v].triggerRelease(note.f)
         },
         importMIDI(tracks){
             for(let track of this.tracks) track.notes = []

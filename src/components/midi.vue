@@ -30,7 +30,7 @@ export default {
         async decodeMIDI(buffer){
             const midi = await new Midi(buffer)
             const bpm = midi.header.tempos[0].bpm
-            const beatSec = 60/bpm/4
+            const beatSec = 60/bpm/8
             let tracks = []
             for(let track of midi.tracks){
                 // console.log(track)

@@ -1,53 +1,45 @@
 <template lang="pug">
 .d-flex.flex-grow-1(:class="ltr?'flex-column':''" style="user-select:none" :style="{cursor}")
 
-	.d-flex.flex-shrink-0.bg-dark(:class="ltr?'pr-3':'flex-column-reverse'")
+	.d-flex.flex-shrink-0.bg-dark(:class="ltr?'':'flex-column-reverse'")
 		.btn.btn-dark.p-0(:style="{flex:`0 0 ${grid.whiteKey}px`,writingMode:ltr?'horizontal-tb':'vertical-lr'}" @click="toggleDisplay()") {{ltr?'編輯':'練琴'}}
-		.flex-grow-1.overflow-auto.hide-scrollbar(ref="ticks" :style="ltr?{width:0}:{height:0}")
-			.position-relative.text-light(:style="ltr?{width:gridStyle.width}:{height:gridStyle.height}")
-				.d-flex(:class="ltr?'':'flex-column-reverse'" @wheel="scaleX($event)" @mousedown="ticking=true;handleMove($event)")
-					.text-right(v-for="tick,ti in ticks" :key="ti" :style="tick.style") {{tick.content}}
-				i.fa.position-absolute.text-warning(v-if="!freezeScroll" :class="ltr?'fa-chevron-down':'fa-chevron-right'" 
-					:style="ltr?{...cursorStyle,marginLeft:'-6px'}:{...cursorStyle,marginBottom:'-6px'}")
+		.flex-grow-1.position-relative.overflow-hidden(ref="ticks" @wheel="scaleX($event)" @mousedown="ticking=true;handleMove($event)")
+			.position-absolute.text-light.text-right(v-for="tick,ti in ticks" :key="ti" :style="tick.style") {{tick.content}}
+			i.fa.position-absolute.text-warning(v-if="!freezeScroll" :class="ltr?'fa-chevron-down':'fa-chevron-right'" 
+				:style="ltr?{...cursorStyle,marginLeft:'-6px'}:{...cursorStyle,marginBottom:'-6px'}")
 					
-	.d-flex.flex-grow-1.position-relative(:class="ltr?'':'flex-column-reverse hide-scrollbar'" 
-			:style="ltr?{height:0,overflowY:'scroll'}:{width:0,overflowX:'scroll'}" @contextmenu.prevent="")
-
-		.flex-shrink-0.position-relative(@wheel="scaleY($event)" 
-				:style="ltr?{width:grid.whiteKey+'px'}:{width:gridStyle.width,height:grid.whiteKey+'px'}")
+	.d-flex.flex-grow-1.bg-dark(:class="ltr?'':'flex-column-reverse'" @contextmenu.prevent="")
+		.flex-shrink-0.position-relative.overflow-hidden(@wheel="scaleY($event)" :style="ltr?{width:grid.whiteKey+'px'}:{height:grid.whiteKey+'px'}")
 			.position-absolute.text-dark(v-for="pG,pi in pianoGrids" :key="pi" :style="pG.style" :class="pG.class" @mousedown="pianoStart(grid2midi(pi))") {{pG.content}}
 			
-		.flex-grow-1.overflow-auto.hide-scrollbar(ref="scroller" 
-				:style="ltr?{height:gridStyle.height,width:0}:{width:gridStyle.width,height:0}" 
-				@wheel="handleWheel($event)" @mousedown="handleStart($event)")
-			.position-relative.overflow-hidden(:style="gridStyle")
-				template(v-for="track in scrollerTracks")
-					transition-group(name="fade")
-						small.text-center(v-for="note in track.notes" :key="note.i" :style="noteStyle(note,track)") {{note.l*grid.W>30&&grid.H>14?grid2note(note.y):''}}
-				.position-absolute(:style="rangeStyle") 
-				.position-absolute.border.border-warning(v-if="!freezeScroll" :class="ltr?'h-100':'w-100'" :style="cursorStyle")
+		.flex-grow-1.position-relative.overflow-hidden(ref="scroller" :style="gridStyle" @wheel="handleWheel($event)" @mousedown="handleStart($event)")
+			template(v-for="track in scrollerTracks")
 				transition-group(name="fade")
-					.position-absolute.h-100(v-if="!ltr" v-for="note in triggering" :key="'trig'+note.i" :style="trigStyle(note)")
+					small.position-absolute.text-center(v-for="note in track.notes" :key="note.i" :style="noteStyle(note,track)") {{note.l*grid.W>30&&grid.H>14?grid2note(note.y):''}}
+			.position-absolute(:style="rangeStyle") 
+			.position-absolute.border.border-warning(v-if="!freezeScroll" :class="ltr?'h-100':'w-100'" :style="cursorStyle")
+			transition-group(name="fade")
+				.position-absolute.h-100(v-if="!ltr" v-for="note in triggering" :key="'trig'+note.i" :style="trigStyle(note)")
 
-	.d-flex.flex-shrink-0.bg-dark(:class="ltr?'pr-3':'flex-column-reverse'")
-		.overflow-auto.hide-scrollbar(:style="{flex:`0 0 ${grid.whiteKey}px`,maxHeight:grid.vH+22+'px'}")
+	.d-flex.flex-shrink-0.bg-dark(:class="ltr?'':'flex-column-reverse'")
+		.overflow-auto.hide-scrollbar(:style="{flex:`0 0 ${grid.whiteKey}px`,maxHeight:grid.velH+grid.sliderSize+'px'}")
 			.small.text-center(v-for="val,name in chords" :key="name" @click="chordType=name" 
 				:class="chordType==name?'text-light bg-secondary':'text-muted bg-dark'") {{name}}
-		.flex-grow-1.overflow-auto(ref="velocities" :style="ltr?{width:0}:{height:0}")
-			.position-relative(
-				:style="ltr?{width:gridStyle.width,height:grid.vH+4+'px'}:{width:grid.vH+4+'px',height:gridStyle.height}" 
-					@mousedown="velociting=true;setVelocity($event)")
+		.flex-grow-1.position-relative.overflow-hidden
+			.position-relative(ref="velocities" :style="ltr?{width:'100%',height:grid.velH+'px'}:{height:'100%',width:grid.velH+'px'}" @mousedown="velociting=true;setVelocity($event)")
 				template(v-for="track in scrollerTracks")
 					.position-absolute(v-for="note in track.notes" :key="note.i" :style="velStyle(note,track)")
+			Scrollbar.position-absolute(:style="ltr?{left:0,bottom:0}:{right:0,top:0}" :clientSize="scrollBound.clientSize" :scrollSize="scrollSize" v-model="scrollLeft" :sliderSize="grid.sliderSize" :ltr="ltr")
 </template>
 
 <script>
-
+import Scrollbar from './scrollbar.vue'
 export default {
 	name: 'piano-roll',
+	components: {Scrollbar},
 	data:()=>({
 		// width height  八度 小節
-		grid: {W:20,H:20,octave:8,measure:32,beat:4,vH:48,blackKey:30,whiteKey:60},
+		grid: {W:20,H:20,octave:8,beat:8,velH:60, velSize:4,blackKey:30,whiteKey:60,sliderSize:16},
 		ltr: false, metronome: false, scrollTop:0, scrollLeft: 0,
 		lastNote: {a:false,x:0,y:0,l:1,f:440,v:30},
 		// active grid-x grid-y length frequency velocity delay
@@ -60,6 +52,7 @@ export default {
 			minor7: [0,3,7,10],
 		},
 		activeNotes: [], clipboard: [], 
+		dragging: null, //拖曳中的音符
 		ticking: false, // 調整時間軸
 		recording: false, // 錄音中
 		velociting: false, // 調整力度
@@ -69,13 +62,12 @@ export default {
 		range: {sx:0,sy:0,ex:0,ey:0}, // 正在選取範圍
 		ranging: false, 
 		cursor: 'auto', // css鼠標
-		mouse: {active:false,x:0,y:0},
+		mouse: {button:-1,x:0,y:0,clientX:0,clientY:0},
 		deleting: false, // 正在按右鍵刪除
 		ctrlKey: false, shiftKey: false,
 		triggering: [], // 以觸發的音訊
-		playX: -1, lastX: -1,
-		playTimeout: null, scrollInterval: null, freezeScroll: false,
-		frame:{from:0,to:0,num:0,den:1,FPS:60},
+		playX: -1, lastX: -1, floatX: 0,
+		playTimeout: null, freezeScroll: false,
 		historyIdx:0, histories: [],
 		events: {},
 	}),
@@ -104,26 +96,25 @@ export default {
 			return Math.round(freq)
 		},
 		getGrid(cx,cy){
-			let {scrollLeft,scrollTop} = this.$refs['scroller']
-			let {top,left,right} = this.$refs['scroller'].getBoundingClientRect()
+			let {top,left,right,bottom} = this.$refs['scroller'].getBoundingClientRect()
 			let {W,H,octave} = this.grid
 			if(this.ltr){
-				let rx = cx-left+scrollLeft
-				let ry = cy-top
+				let rx = cx-left+this.scrollLeft
+				let ry = cy-top+this.scrollTop
 				let x = Math.floor(rx/W)
 				let y = Math.floor(ry/H)
 				return {x,y,rx,ry}
 			}else{
-				let rx = parseInt(this.gridStyle.height)-cy-scrollTop+top
-				let ry = right-cx
+				let rx = this.scrollLeft-cy+bottom
+				let ry = right-cx-this.scrollTop
 				let x = Math.floor(rx/W)
 				let y = Math.floor(ry/H)
 				return {x,y,rx,ry}
 			}
 		},
 		checkMovable(dx,dy){
-			let {octave} = this.grid
-			let xs = this.activeNotes.map(n=>n.x+dx).every(x=>0<=x&&x<this.measure*4)
+			let {octave,beat} = this.grid
+			let xs = this.activeNotes.map(n=>n.x+dx).every(x=>0<=x)
 			let ys = this.activeNotes.map(n=>n.y+dy).every(y=>0<=y&&y<octave*12)
 			return xs&&ys
 		},
@@ -131,7 +122,7 @@ export default {
 		scaleX(e,arg){
 			e.preventDefault()
 			let delta = Math.sign(e.deltaY)*2
-			this.grid.W = this.minmax(this.grid.W-delta,10,50)
+			this.grid.W = this.minmax(this.grid.W-delta,5,25)
 		},
 		scaleY(e,arg){
 			e.preventDefault()
@@ -139,11 +130,17 @@ export default {
 			this.grid.H = this.minmax(this.grid.H-delta,10,30)
 		},
 		handleWheel(e){
-			if(this.shiftKey){
-				this.$refs['scroller'].scrollLeft+= Math.sign(e.deltaY)*100
-			}else if(!this.ltr&&!(this.freezeScroll&&this.playing)){
-				e.preventDefault();
-				this.$refs['scroller'].scrollTop+= Math.sign(e.deltaY)*150
+			let {W,H,beat} = this.grid
+			if(this.ltr){
+				if(this.shiftKey) 
+					if(this.freezeScroll&&this.playing) return
+					else this.scrollLeft+= Math.sign(e.deltaY)*W*beat
+				else this.scrollTop+= Math.sign(e.deltaY)*H*4
+			}else{
+				if(this.shiftKey) this.scrollTop+= Math.sign(e.deltaY)*H*4
+				else 
+					if(this.freezeScroll&&this.playing) return
+					else this.scrollLeft-= Math.sign(e.deltaY)*W*beat
 			}
 		},
 		resizeStart(dir,note){
@@ -153,21 +150,20 @@ export default {
 		},
 		setVelocity(e){
 			let {x} = this.getGrid(e.clientX,e.clientY)
-			let {vH} = this.grid
+			let {velH,velSize} = this.grid
 			let {top,left} = this.$refs['velocities'].getBoundingClientRect()
 			let px = this.ltr?e.clientY-top:e.clientX-left
-			let velocity = 127-this.minmax(parseInt(px/vH*127),0,127)
+			let velocity = 127-this.minmax(parseInt(px/(velH-velSize)*127),0,127)
 			let notes = this.activeNotes.length?this.activeNotes:this.notes
 			notes.filter(n=>n.x<=x&&x<n.x+n.l)
 				.filter(n=>!this.triggering.includes(n))
 				.map(n=>n.v=velocity)
 		},
 		handleStart(e){
-			let grid = this.getGrid(e.clientX,e.clientY)
-			if(!grid) return 
-			let {x,y,rx,ry} = grid
+			let {x,y,rx,ry} = this.getGrid(e.clientX,e.clientY)
+			let { W } = this.grid
 			let notes = this.notes.filter(n=>n.y==y).filter(n=>n.x<=x&&x<n.x+n.l)
-			this.mouse = {active:true,x,y}
+			this.mouse = {button:e.button,x,y,clientX:e.clientX,clientY:e.clientY}
 			if(e.button==0){
 				if(this.ctrlKey){
 					this.clearSelection()
@@ -177,7 +173,6 @@ export default {
 				}else if(notes.length){
 					this.addHistory()
 					// detect if in resize area
-					let {W} = this.grid
 					let note = notes[0]
 					let dx = rx-note.x*W
 					if(dx<this.resizeBuffer)
@@ -191,7 +186,7 @@ export default {
 					}
 					// move the note
 					if(!this.resizing){
-						this.moving = note
+						this.dragging = note
 						this.triggerSelection(false)
 					}
 				}else{
@@ -207,7 +202,7 @@ export default {
 							f:this.grid2freq(y-oy),
 							v:this.lastNote.v,
 						}
-						this.moving = newNote
+						this.dragging = newNote
 						this.notes.push(newNote)
 						this.activeNotes.push(newNote)
 					}
@@ -225,10 +220,9 @@ export default {
 		handleMove(e){
 			if(this.velociting) return this.setVelocity(e)
 			let {x,y,rx,ry} = this.getGrid(e.clientX,e.clientY)
-			if(x<0) return 
 			let notes = this.notes.filter(n=>n.y==y).filter(n=>n.x<=x&&x<n.x+n.l)
 			if(this.ticking){
-				this.playX = this.lastX = x
+				this.playX = this.lastX = this.floatX = x
 				// this.cursor = 'col-resize'
 			}else if(this.ranging){
 				this.range.ex = x
@@ -243,11 +237,9 @@ export default {
 						n.x+= dx
 					}
 				}else if(dir=='right'&&this.activeNotes.every(n=>n.l+dl>0)){
-					for(let n of this.activeNotes){
-						n.l+= dl
-					}
+					for(let n of this.activeNotes) n.l+= dl
 				}
-			}else if (this.moving){
+			}else if (this.dragging){
 				let dx = x-this.mouse.x
 				let dy = y-this.mouse.y
 				if(this.checkMovable(dx,dy)){
@@ -274,11 +266,17 @@ export default {
 					this.cursor = this.ltr?'ew-resize':'ns-resize'
 				else
 					this.cursor = 'auto'
-			}else{
+			}else if(this.mouse.button==1) {
+				this.scrollLeft -= this.ltr?e.clientX-this.mouse.clientX:this.mouse.clientY-e.clientY
+				this.scrollTop -= this.ltr?e.clientY-this.mouse.clientY:e.clientX-this.mouse.clientX
+				this.cursor = 'grabbing'
+			}else {
 				this.cursor = 'auto'
 			}
 			this.mouse.x = x
 			this.mouse.y = y
+			this.mouse.clientX = e.clientX
+			this.mouse.clientY = e.clientY
 		},
 		handleEnd(e){
 			if(this.recording){
@@ -298,74 +296,50 @@ export default {
 				this.resizing = false
 			}else if(this.activeNotes.length){
 				this.lastNote = {...this.activeNotes[0]}
-				this.moving = false
+				this.dragging = false
 				this.activeNotes.map(n=>{
 					this.triggerRelease(n)
 					n.f = this.grid2freq(n.y)
 				})
-				// let measure = Math.ceil(this.endX/4)+1
-				// if(measure>this.grid.measure) this.grid.measure = measure
-				// this.notes.sort((a,b)=>a.x-b.x)
 			}else{
 				for(let note in this.triggering)
 					this.pianoEnd(this.grid2midi(note.y))
 			}
 			this.deleting = false
 			this.velociting = false
-			this.mouse.active = false
+			this.mouse.button = -1
 			this.ticking = false
 		},
 		// commands
-		scrollLoop(){
-			let {from,to,num,den,FPS} = this.frame
-			if(this.freezeScroll){
-				let progress = num/den
-				let x = progress*to+(1-progress)*from
-				if(this.ltr){
-					this.$refs['scroller'].scrollLeft = x
-				}else{
-					let scrollHeight = parseInt(this.gridStyle.height)-this.$refs['scroller'].clientHeight
-					this.$refs['scroller'].scrollTop = scrollHeight-x
-				}
-				if(num<den) this.frame.num++
-			}
-		},
 		playLoop(){
 			let {W,beat} = this.grid
-			// animation first
-			this.frame = {
-				from: this.playX*W,
-				to: (this.playX+1)*W,
-				num: 0,
-				den: this.frame.FPS*this.beatSec,
-				FPS: this.frame.FPS
-			}
-			// async second
+			if(this.freezeScroll) this.scrollLeft = this.floatX*this.grid.W
+			// async
+			let interpolate =  Math.min(this.beatSec*30) //FPS
 			clearTimeout(this.playTimeout)
-			if(this.playX>this.endX)
-				return this.stop()
-			else
-				this.playTimeout = setTimeout(()=>{
-					this.playX++
-					this.playLoop()
-				},this.beatSec*1000)
+			if(this.playX>this.endX) return this.stop()
+			else this.playTimeout = setTimeout(()=>{ this.floatX+=1/interpolate; this.playLoop() }, 1000*this.beatSec/interpolate)
+			if(Math.floor(this.floatX)-this.playX>=1) this.playX++
+			else return //非跨越整數，略過下列執行
 			// time consuming process
 			if(this.recording){
-				for(let note of this.activeNotes)
-					note.l = this.playX - note.x
+				for(let note of this.activeNotes) note.l = this.playX - note.x
 				this.$emit('mic-sample')
 			}else{
 				for(let track of this.tracks){
 					for(let note of track.notes){
-						if(note.x==this.playX){
+						if(!note.p&&note.x==this.playX){
+							note.p = true
 							let duration = note.l*this.beatSec
 							track.instrument.triggerAttackRelease(note.f,duration,undefined,note.v/127)
 							this.triggering.push(note)
 						}
 					}
 					for(let note of this.triggering){
-						if(note.x+note.l==this.playX-1)
+						if(note.p&&note.x+note.l<this.playX){
+							note.p = false
 							this.triggering = this.triggering.filter(n=>n!=note)
+						}
 					}
 				}
 			}
@@ -383,17 +357,15 @@ export default {
 		play(){
 			if(this.playing) return
 			this.playing = true
-			if(this.freezeScroll) this.playX = this.scrollBound.minX
+			if(this.freezeScroll) this.playX = this.floatX = this.scrollBound.minX
 			this.playLoop()
-			this.scrollInterval = setInterval(()=>{this.scrollLoop()},1000/this.frame.FPS)
 		},
 		stop(){
 			this.playing = false
 			this.recording = false
-			this.frameIndex = 0
+			this.floatX = this.playX
 			this.playX = this.lastX
-			clearTimeout(this.playTimeout)
-			clearInterval(this.scrollInterval)            
+			clearTimeout(this.playTimeout)     
 			for(let note of this.triggering)
 				this.triggerRelease(note)
 		},
@@ -405,8 +377,6 @@ export default {
 			this.ltr=!this.ltr
 			this.grid.H=20;
 			await this.$nextTick();
-			let scrollHeight = parseInt(this.gridStyle.height)-this.$refs['scroller'].clientHeight
-			this.$refs['scroller'].scrollTop = scrollHeight
 		},
 		triggerAttack(note){
 			this.instrument.triggerAttack(note.f,undefined,note.v/127)
@@ -441,6 +411,7 @@ export default {
 				l:1,
 				f:this.grid2freq(y),
 				v:v,
+				p:false, //playing
 			}
 			this.activeNotes.push(newNote)
 			if(this.recording)
@@ -526,25 +497,15 @@ export default {
 						this.deleteNotes()
 					}
 					break
-				case 'C':
-					if(e.ctrlKey)
-						this.copyNotes()
-					break
-				case 'V':
-					if(e.ctrlKey)
-						this.pasteNotes()
-					break
-				case 'DELETE':
-					this.deleteNotes();break
-				case 'BACKSPACE':
-					this.deleteNotes();break
+				case 'C': if(e.ctrlKey) this.copyNotes();break
+				case 'V': if(e.ctrlKey) this.pasteNotes();break
+				case 'F': if(e.ctrlKey) e.preventDefault();this.freezeScroll=!this.freezeScroll;break
+				case 'DELETE': this.deleteNotes();break
+				case 'BACKSPACE': this.deleteNotes();break
 				case 'ARROWLEFT':
 					if(e.shiftKey){
 						if(this.activeNotes.every(n=>n.l>1))
 							this.activeNotes.map(n=>{n.l--})
-					}else if(e.ctrlKey){
-						// if(this.checkMovable(-1,0))
-						//     this.activeNotes.map(n=>{n.x--})
 					}else if(this.checkMovable(-1,0)){
 						this.activeNotes.map(n=>{n.x--})
 					}
@@ -555,8 +516,6 @@ export default {
 							this.activeNotes.map(n=>{n.l++})
 						else
 							this.activeNotes.map(n=>{n.x++})
-					}else if(e.ctrlKey){
-
 					}
 					break
 				case 'ARROWDOWN':
@@ -565,8 +524,6 @@ export default {
 						let i = this.activeNotes.findIndex(n=>n.y==minY)
 						this.activeNotes[i].y+= 12
 						this.triggerSelection()
-					}else if(e.ctrlKey){
-
 					}else{
 						this.activeNotes.map(n=>{n.y++;n.f=this.grid2freq(n.y)})
 					}
@@ -577,8 +534,6 @@ export default {
 						let i = this.activeNotes.findIndex(n=>n.y==maxY)
 						this.activeNotes[i].y-= 12
 						this.triggerSelection()
-					}else if(e.ctrlKey){
-
 					}else{
 						this.activeNotes.map(n=>{n.y--;n.f=this.grid2freq(n.y)})
 					}
@@ -594,10 +549,8 @@ export default {
 		},
 		handleKeyup(e){
 			switch(e.key.toUpperCase()){
-				case 'SHIFT':
-					this.shiftKey = false; break
-				case 'CONTROL':
-					this.ctrlKey = false; break
+				case 'SHIFT': this.shiftKey = false; break
+				case 'CONTROL': this.ctrlKey = false; break
 				default: break;
 			}
 		},
@@ -609,18 +562,18 @@ export default {
 			let activeColor = `rgba(255, 163, 164, ${alpha})`
 			let bgc = note.a?activeColor:`rgba(${r}, ${g}, ${b}, ${alpha})`
 			return this.ltr?{
-				position: 'absolute',
 				background: bgc,
 				top: note.y*H+'px',
-				left: note.x*W+'px',
+				left: 0,
+				transform: `translate(${note.x*W-this.scrollLeft}px,${-this.scrollTop}px)`,
 				height: H-2+'px',
 				lineHeight: H-2+'px',
 				width: note.l*W-2+'px',
 			}:{
-				position: 'absolute',
 				background: bgc,
 				right: note.y*H+'px',
-				bottom: note.x*W+'px',
+				bottom: 0,
+				transform: `translate(${-this.scrollTop}px,${this.scrollLeft-note.x*W}px)`,
 				width: H-2+'px',
 				lineHeight: H-2+'px',
 				height: note.l*W-2+'px',
@@ -628,26 +581,27 @@ export default {
 			}
 		},
 		velStyle(note, track){
-			let {W,H,vH} = this.grid
+			let {W,H,velH,velSize} = this.grid
 			return this.ltr?{
-				bottom:note.v/127*vH+'px',
-				left: note.x*W+'px',
+				bottom:note.v/127*(velH-velSize)+'px',
+				left: 0,
+				transform: `translateX(${note.x*W-this.scrollLeft}px)`,
 				width: note.l*W+'px',
-				height:'4px',
+				height: `${velSize}px`,
 				background: note.a?'#FFA3A4':'#C4FACF',
 			}:{
-				right:note.v/127*vH+'px',
-				bottom: note.x*W+'px',
+				right:note.v/127*(velH-velSize)+'px',
+				bottom: 0,
+				transform: `translateY(${this.scrollLeft-note.x*W}px)`,
 				height: note.l*W+'px',
-				width:'4px',
+				width: `${velSize}px`,
 				background: note.a?'#FFA3A4':'#C4FACF',
 			}
 		},
 		trigStyle(note){
 			let { H } = this.grid
 			return {
-				top:0, width:H+'px',
-				right: H*note.y+'px',
+				top:0, width:H+'px', right: H*note.y+this.scrollTop+'px',
 				background: 'rgba(255, 193, 7, 0.1)'
 			}
 		},
@@ -661,17 +615,11 @@ export default {
 		},
 		scrollBound(){
 			let {clientWidth,clientHeight} = this.$refs['scroller']??{}
+			let clientSize = this.ltr?clientWidth:clientHeight
 			let { W } = this.grid
-			if(this.ltr){
-				let minX = Math.floor(this.scrollLeft/W)
-				let maxX = Math.ceil((this.scrollLeft+clientWidth)/W)
-				return {minX, maxX}
-			}else{
-				let scrollBottom = parseInt(this.gridStyle.height)-this.scrollTop
-				let minX = Math.floor((scrollBottom-clientHeight)/W)
-				let maxX = Math.ceil(scrollBottom/W)
-				return {minX, maxX}
-			}
+			let minX = Math.floor(this.scrollLeft/W)
+			let maxX = Math.ceil((this.scrollLeft+clientSize)/W)
+			return {minX, maxX, clientSize}
 		},
 		scrollerTracks(){
 			let {minX, maxX} = this.scrollBound
@@ -681,12 +629,22 @@ export default {
 			}))
 		},
 		ticks(){
+			let {minX, maxX} = this.scrollBound
 			let {W,beat} = this.grid
-			return Array.from(Array(this.measure).keys(),i=>{
-				return this.ltr?
-					{ style: { width: W*beat+'px' }, content: i+1 }:
-					{ style: { height: W*beat+'px' }, content: i+1 }
-			})
+			let min = Math.floor(minX/beat), max = Math.ceil(maxX/beat)
+			let ticks = []
+			for (let i = min; i <=max; i++) 
+				ticks.push({
+					style: this.ltr?{ 
+						width: W*beat+'px', height: '100%', top: 0, left: 0,
+						transform: `translateX(${i*W*beat-this.scrollLeft}px)`,
+					}:{ 
+						height: W*beat+'px', width: '100%', bottom: 0, left: 0,
+						transform: `translateY(${this.scrollLeft-i*W*beat}px)`,
+					},
+					content: i+1
+				})
+			return ticks
 		},
 		beatSec(){
 			let {beat} = this.grid
@@ -700,22 +658,22 @@ export default {
 			endX = Math.ceil(endX/beat)*beat+1
 			return endX
 		},
-		measure(){
-			let measure = Math.ceil(this.endX/this.grid.beat)
-			return measure<32?32:measure
+		scrollSize(){
+			let {clientSize} = this.scrollBound
+			let {W} = this.grid
+			return clientSize+Math.max(this.scrollLeft, Math.ceil(this.endX*W))
 		},
 		cursorStyle(){
 			let {W} = this.grid
-			let x = this.playX*W
 			let duration = this.playing?this.beatSec:0
 			return this.ltr?{
 				top: 0, left: 0, 
-				transform: `translateX(${x}px)`,
-				transition: `transform ${duration}s linear`,
+				transform: `translateX(${W*this.playX-this.scrollLeft}px)`,
+				transition: `transform ${this.playing?this.beatSec:0}s linear`,
 			}:{
 				bottom: 0, left: 0,
-				transform: `translateY(${-x}px)`,
-				transition: `transform ${duration}s linear`,
+				transform: `translateY(${this.scrollLeft-W*this.playX}px)`,
+				transition: `transform ${this.playing?this.beatSec:0}s linear`,
 			}
 		},
 		rangeStyle(){
@@ -756,7 +714,7 @@ export default {
 					class: isTriggered?'bg-warning':isBlack?'bg-dark':'bg-light',
 					style:{
 						width: (isBlack?blackKey:whiteKey)+'px',
-						top: (isBlack?top+H:top)+'px',
+						top: (isBlack?top+H:top)-this.scrollTop+'px',
 						left: 0,
 						zIndex: isBlack?666:66,
 						boxShadow: isBlack?'2px 0 white':'0 -2px black',
@@ -770,7 +728,7 @@ export default {
 					class: isTriggered?'bg-warning':isBlack?'bg-dark':'bg-light',
 					style:{
 						height: (isBlack?blackKey+10:whiteKey)+'px',
-						right: (isBlack?H*i:top)+'px',
+						right: (isBlack?H*i:top)+this.scrollTop+'px',
 						top: 0,
 						zIndex: isBlack?666:66,
 						boxShadow: isBlack?'':'2px 0 black',
@@ -782,40 +740,26 @@ export default {
 		},
 		gridStyle(){
 			let {H,W,octave,beat} = this.grid
-			let ltr = this.ltr
 			let pattern = (c1,px1,c2,px2,i)=>`${c1} ${px1*i}px, ${c1} ${px1*(i+1)-px2}px, ${c2} ${px1*(i+1)-px2}px, ${c2} ${px1*(i+1)}px`
+			// FL Studio
 			let thin = i=>pattern('transparent',W,'#42545F',1,i)
 			let thick = i=>pattern('transparent',W,'#29373F',3,i)
 			let black = i=>pattern('#394B56',H,'#29373F',2,i)
 			let white = i=>pattern('#42545F',H,'#29373F',2,i)
+			// Logic Pro 252525 303030 454545
+			let measureWidth = W*4
 			return {
-				width: (ltr?W*4*this.measure:H*12*octave)+'px',
-				height: (ltr?H*12*octave:W*4*this.measure)+'px',
-				background: 
-					`repeating-linear-gradient(to ${ltr?'right':'top'}, ${thin(0)}, ${thin(1)}, ${thin(2)}, ${thick(3)}), `+
-					`repeating-linear-gradient(to ${ltr?'bottom':'left'}, `+ 
-					`${white(0)}, ${black(1)}, ${white(2)}, ${black(3)}, ${white(4)}, ${black(5)}, ${white(6)}, ${white(7)}, ${black(8)}, ${white(9)}, ${black(10)}, ${white(11)})`
+				backgroundImage: 
+					`repeating-linear-gradient(to ${this.ltr?'right':'top'}, ${thin(0)}, ${thin(1)}, ${thin(2)}, ${thick(3)}), `+
+					`repeating-linear-gradient(to ${this.ltr?'bottom':'left'}, `+ 
+					`${white(0)}, ${black(1)}, ${white(2)}, ${black(3)}, ${white(4)}, ${black(5)}, ${white(6)}, ${white(7)}, ${black(8)}, ${white(9)}, ${black(10)}, ${white(11)})`,
+				backgroundPosition: this.ltr?`${-this.scrollLeft%measureWidth}px ${-this.scrollTop}px`:`${-this.scrollTop}px ${this.scrollLeft%measureWidth}px`,
 			}
 		},
 	},
 	mounted(){
 		this.addHistory()
 		this.ltr = true // 觸發scrollerTracks
-		// 互相綁定捲動事件
-		let scrollBundles = ['scroller','ticks','velocities']
-		for(let ref of scrollBundles){
-			this.$refs[ref].addEventListener('scroll',()=>{
-				let {scrollLeft, scrollTop} = this.$refs[ref]
-				this.scrollLeft = scrollLeft
-				this.scrollTop = scrollTop
-				for(let r of scrollBundles.filter(r=>r!=ref)){
-					if(this.ltr)
-						this.$refs[r].scrollLeft = scrollLeft
-					else
-						this.$refs[r].scrollTop = scrollTop
-				}
-			})  
-		}
 		this.events = {
 			mousemove: e=>this.handleMove(e),
 			mouseup: e=>this.handleEnd(e),
@@ -835,11 +779,11 @@ export default {
 
 <style scoped>
 .hide-scrollbar::-webkit-scrollbar {
-  display: none;
+  	display: none;
 }
 .hide-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+	-ms-overflow-style: none;  /* IE and Edge */
+	scrollbar-width: none;  /* Firefox */
 }
 /* .fade-enter-active{
 	opacity: 0.6;

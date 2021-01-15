@@ -1,0 +1,67 @@
+Arguments: 
+  C:\Program Files\nodejs\node.exe C:\Program Files (x86)\Yarn\bin\yarn.js add effectors.js
+
+PATH: 
+  C:\Program Files\nodejs\node_modules\npm\node_modules\npm-lifecycle\node-gyp-bin;C:\Users\ChuBoy\Desktop\vue_daw\node_modules\.bin;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.0\bin;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.0\libnvvp;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files\nodejs\;C:\Program Files\Git\cmd;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\NVIDIA Corporation\NVIDIA NvDLISR;C:\ffmpeg\bin;C:\Program Files\NVIDIA Corporation\Nsight Compute 2020.1.2\;C:\Program Files (x86)\Yarn\bin\;C:\python\Scripts\;C:\python\;C:\Users\ChuBoy\AppData\Local\Microsoft\WindowsApps;C:\Users\ChuBoy\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\ChuBoy\AppData\Roaming\npm;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.0\bin;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.0\libnvvp;C:\Users\ChuBoy\AppData\Local\Yarn\bin
+
+Yarn version: 
+  1.22.5
+
+Node version: 
+  12.18.3
+
+Platform: 
+  win32 x64
+
+Trace: 
+  Error: https://registry.npmjs.org/effectors.js: Not found
+      at Request.params.callback [as _callback] (C:\Program Files (x86)\Yarn\lib\cli.js:66097:18)
+      at Request.self.callback (C:\Program Files (x86)\Yarn\lib\cli.js:140749:22)
+      at Request.emit (events.js:315:20)
+      at Request.<anonymous> (C:\Program Files (x86)\Yarn\lib\cli.js:141721:10)
+      at Request.emit (events.js:315:20)
+      at IncomingMessage.<anonymous> (C:\Program Files (x86)\Yarn\lib\cli.js:141643:12)
+      at Object.onceWrapper (events.js:421:28)
+      at IncomingMessage.emit (events.js:327:22)
+      at endReadableNT (_stream_readable.js:1220:12)
+      at processTicksAndRejections (internal/process/task_queues.js:84:21)
+
+npm manifest: 
+  {
+    "name": "vue_daw",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+      "start": "parcel src/index.pug",
+      "xcopy": "xcopy sounds dist\\ /E/H/C/I/Y",
+      "build": "parcel build src/index.pug -d build --public-url .",
+      "postbuild": "xcopy sounds build\\ /E/H/C/I/Y",
+      "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+      "@babel/plugin-transform-runtime": "^7.11.5",
+      "@fortawesome/fontawesome-free": "^5.14.0",
+      "@tonejs/midi": "^2.0.25",
+      "app.vue": "^0.1.10",
+      "bootstrap": "^4.5.2",
+      "tone": "^14.7.39",
+      "vue": "^2.6.12",
+      "vue-hot-reload-api": "^2.3.4"
+    },
+    "devDependencies": {
+      "@babel/core": "^7.11.6",
+      "@babel/preset-env": "^7.11.5",
+      "@vue/component-compiler-utils": "^3.2.0",
+      "pug": "^3.0.0",
+      "vue-template-compiler": "^2.6.12"
+    }
+  }
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile

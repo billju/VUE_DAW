@@ -7,7 +7,7 @@
 <script>
 import {Midi} from '@tonejs/midi'
 import { Buffer } from 'tone'
-
+import {Note} from '../models.js'
 export default {
     name: 'MIDI',
     data:()=>({
@@ -34,14 +34,12 @@ export default {
                 let { number, family, name, percussion } = track.instrument
                 let newTrack = {notes: [], family}
                 for(let note of track.notes){
-                    let a = false
-                    let i = '_' + Math.random().toString(36).slice(2)
-                    let x = Math.round(note.time/beatSec)
-                    let y = 8*12-note.midi+11 // C0 = 12
-                    let l = Math.ceil(note.duration/beatSec)
-                    let f = Math.round(440*Math.pow(2,(note.midi-69)/12))
-                    let v = note.velocity*127
-                    newTrack.notes.push({a,i,x,y,l,v,f})
+                    newTrack.notes.push(new Note({
+                        x:Math.round(note.time/beatSec),
+                        y:8*12-note.midi+11, // C0 = 12
+                        l:Math.ceil(note.duration/beatSec),
+                        v:note.velocity*127,
+                    }))
                 }
                 tracks.push(newTrack)
             }

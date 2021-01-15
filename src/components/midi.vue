@@ -17,9 +17,6 @@ export default {
         
     },
     methods:{
-        generateID(){
-            return '_' + Math.random().toString(36).substr(2, 9)
-        },
         importMIDI(file){
             let reader = new FileReader()
             reader.readAsArrayBuffer(file)
@@ -38,7 +35,7 @@ export default {
                 let newTrack = {notes: [], family}
                 for(let note of track.notes){
                     let a = false
-                    let i = this.generateID()
+                    let i = '_' + Math.random().toString(36).slice(2)
                     let x = Math.round(note.time/beatSec)
                     let y = 8*12-note.midi+11 // C0 = 12
                     let l = Math.ceil(note.duration/beatSec)

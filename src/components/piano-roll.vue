@@ -12,8 +12,9 @@
 		.flex-shrink-0.position-relative.overflow-hidden(@wheel="scaleY($event)" :style="ltr?{width:grid.whiteKey+'px'}:{height:grid.whiteKey+'px'}")
 			.position-absolute.text-dark(v-for="pG,pi in pianoGrids" :key="pi" :style="pG.style" :class="pG.class" @mousedown="pianoStart(grid2midi(pi))") {{pG.content}}
 			
-		.flex-grow-1.position-relative.overflow-hidden(ref="scroller" :style="gridStyle" @wheel="handleWheel($event)" @mousedown="handleStart($event)")
-			template(v-for="track in scrollerTracks")
+		.flex-grow-1.position-relative.overflow-hidden(ref="scroller" @wheel="handleWheel($event)" @mousedown="handleStart($event)")
+			canvas.w-100.h-100.position-absolute(ref="canvas")
+			//- template(v-for="track in scrollerTracks")
 				transition-group(name="fade")
 					small.position-absolute.text-center(v-for="note in track.notes" :key="note.i" :style="noteStyle(note,track)") {{note.l*grid.W>30&&grid.H>14?grid2note(note.y):''}}
 			.position-absolute(:style="rangeStyle") 
@@ -26,7 +27,7 @@
 			.small.text-center(v-for="val,name in chords" :key="name" @click="chordType=name" 
 				:class="chordType==name?'text-light bg-secondary':'text-muted bg-dark'") {{name}}
 		.flex-grow-1.position-relative.overflow-hidden
-			.position-relative(ref="velocities" :style="ltr?{width:'100%',height:grid.velH+'px'}:{height:'100%',width:grid.velH+'px'}" @mousedown="velociting=true;setVelocity($event)")
+			//- .position-relative(ref="velocities" :style="ltr?{width:'100%',height:grid.velH+'px'}:{height:'100%',width:grid.velH+'px'}" @mousedown="velociting=true;setVelocity($event)")
 				template(v-for="track in scrollerTracks")
 					.position-absolute(v-for="note in track.notes" :key="note.i" :style="velStyle(note,track)")
 			Scrollbar.position-absolute(:style="ltr?{left:0,bottom:0}:{right:0,top:0}" :clientSize="scrollBound.clientSize" :scrollSize="scrollSize" v-model="scrollLeft" :sliderSize="grid.sliderSize" :ltr="ltr")
@@ -80,7 +81,7 @@ export default {
 		// utils
 		minmax(input,min,max){return input>max?max:input<min?min:input},
 		generateID(){
-			return '_' + Math.random().toString(36).substr(2, 9)
+			return '_' + Math.random().toString(36).slice(2)
 		},
 		grid2note(y){
 			let {octave} = this.grid
@@ -329,9 +330,9 @@ export default {
 				for(let track of this.tracks){
 					for(let note of track.notes){
 						if(!note.p&&note.x==this.playX){
-							note.p = true
 							let duration = note.l*this.beatSec
 							track.instrument.triggerAttackRelease(note.f,duration,undefined,note.v/127)
+							note.p = true
 							this.triggering.push(note)
 						}
 					}
@@ -555,31 +556,6 @@ export default {
 			}
 		},
 		// styles
-		noteStyle(note, track){
-			let {W,H} = this.grid
-			let [r,g,b] = track.rgb
-			let alpha = (note.v/127)*0.5+0.5
-			let activeColor = `rgba(255, 163, 164, ${alpha})`
-			let bgc = note.a?activeColor:`rgba(${r}, ${g}, ${b}, ${alpha})`
-			return this.ltr?{
-				background: bgc,
-				top: note.y*H+'px',
-				left: 0,
-				transform: `translate(${note.x*W-this.scrollLeft}px,${-this.scrollTop}px)`,
-				height: H-2+'px',
-				lineHeight: H-2+'px',
-				width: note.l*W-2+'px',
-			}:{
-				background: bgc,
-				right: note.y*H+'px',
-				bottom: 0,
-				transform: `translate(${-this.scrollTop}px,${this.scrollLeft-note.x*W}px)`,
-				width: H-2+'px',
-				lineHeight: H-2+'px',
-				height: note.l*W-2+'px',
-				writingMode: 'vertical-lr',
-			}
-		},
 		velStyle(note, track){
 			let {W,H,velH,velSize} = this.grid
 			return this.ltr?{
@@ -604,6 +580,49 @@ export default {
 				top:0, width:H+'px', right: H*note.y+this.scrollTop+'px',
 				background: 'rgba(255, 193, 7, 0.1)'
 			}
+		},
+		draw(){
+			const canvas = this.$refs.canvas
+			const ctx = canvas.getContext('2d')
+			let {width, height} = canvas
+			let {W,H} = this.grid
+			ctx.clearRect(0,0,width,height)
+			const res = (m,n)=>(m%n+n)%n
+			let iy = Math.floor(this.scrollTop/H)
+			let jy = (this.ltr?height:width)/H
+			let oy = res(this.scrollTop,H)
+			for(let i=-1;i<=jy;i++){
+				let isBlack = [2,4,6,9,11].includes(res(iy+i+1,12))
+				ctx.fillStyle = isBlack?'#394B56':'#42545F'
+				if(this.ltr) ctx.fillRect(0,i*H-oy,width,H-2)
+				else ctx.fillRect((i+1)*H-oy,0,H-2,height)
+			}
+			let ix = Math.floor(this.scrollLeft/W)
+			let jx = (this.ltr?width:height)/W
+			let ox = res(this.scrollLeft,W)
+			for(let i=-1;i<=jx;i++){
+				ctx.fillStyle = res(ix+i+1,4)?'#42545F':'#29373F'
+				if(this.ltr) ctx.fillRect(i*W-ox,0,1,height)
+				else ctx.fillRect(0,height-(i+1)*W+ox,width,1)
+			}
+			for(let track of this.scrollerTracks){
+				for(let note of track.notes){
+					let [r,g,b] = track.rgb
+					let alpha = (note.v/127)*0.5+0.5
+					let activeColor = `rgba(255, 163, 164, ${alpha})`
+					let bgc = note.a?activeColor:`rgba(${r}, ${g}, ${b}, ${alpha})`
+					ctx.fillStyle = bgc
+					if(this.ltr) ctx.fillRect(
+						note.x*W-this.scrollLeft, 
+						note.y*H-this.scrollTop, 
+						note.l*W, H)
+					else ctx.fillRect(
+						width-(note.y+1)*H-this.scrollTop, 
+						height-(note.x+1)*W+this.scrollLeft-note.l*W, 
+						H, note.l*W)
+				}
+			}
+			requestAnimationFrame(this.draw)
 		},
 	},
 	computed:{
@@ -683,15 +702,15 @@ export default {
 			let {W,H} = this.grid
 			return this.ranging?this.ltr?{
 				position: 'absolute',
-				top: sy*H+'px',
-				left: sx*W+'px',
+				top: sy*H-this.scrollTop+'px',
+				left: sx*W-this.scrollLeft+'px',
 				height: (ey-sy)*H+'px',
 				width: (ex-sx)*W+'px',
 				border: '5px dashed dodgerblue'
 			}:{
 				position: 'absolute',
-				right: sy*H+'px',
-				bottom: sx*W+'px',
+				right: sy*H+this.scrollTop+'px',
+				bottom: sx*W-this.scrollLeft+'px',
 				width: (ey-sy)*H+'px',
 				height: (ex-sx)*W+'px',
 				border: '5px dashed dodgerblue'
@@ -738,27 +757,18 @@ export default {
 				}
 			})
 		},
-		gridStyle(){
-			let {H,W,octave,beat} = this.grid
-			let pattern = (c1,px1,c2,px2,i)=>`${c1} ${px1*i}px, ${c1} ${px1*(i+1)-px2}px, ${c2} ${px1*(i+1)-px2}px, ${c2} ${px1*(i+1)}px`
-			// FL Studio
-			let thin = i=>pattern('transparent',W,'#42545F',1,i)
-			let thick = i=>pattern('transparent',W,'#29373F',3,i)
-			let black = i=>pattern('#394B56',H,'#29373F',2,i)
-			let white = i=>pattern('#42545F',H,'#29373F',2,i)
-			// Logic Pro 252525 303030 454545
-			let measureWidth = W*4
-			return {
-				backgroundImage: 
-					`repeating-linear-gradient(to ${this.ltr?'right':'top'}, ${thin(0)}, ${thin(1)}, ${thin(2)}, ${thick(3)}), `+
-					`repeating-linear-gradient(to ${this.ltr?'bottom':'left'}, `+ 
-					`${white(0)}, ${black(1)}, ${white(2)}, ${black(3)}, ${white(4)}, ${black(5)}, ${white(6)}, ${white(7)}, ${black(8)}, ${white(9)}, ${black(10)}, ${white(11)})`,
-				backgroundPosition: this.ltr?`${-this.scrollLeft%measureWidth}px ${-this.scrollTop}px`:`${-this.scrollTop}px ${this.scrollLeft%measureWidth}px`,
-			}
-		},
 	},
 	mounted(){
 		this.addHistory()
+		const resizeObserver = new ResizeObserver(entries=>{
+			let {width, height} = entries[0].contentRect
+			this.$refs.canvas.width = width
+			this.$refs.canvas.height = height
+		})
+		resizeObserver.observe(this.$refs.canvas)
+		this.$refs.canvas.width = this.$refs.canvas.clientWidth
+		this.$refs.canvas.height = this.$refs.canvas.clientHeight
+		this.draw()
 		this.ltr = true // 觸發scrollerTracks
 		this.events = {
 			mousemove: e=>this.handleMove(e),

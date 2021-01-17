@@ -1,6 +1,6 @@
 <template lang="pug">
 .btn-group.btn-group-sm.position-relative
-    select.btn.btn-outline-primary(v-model="effect" @change="setEffect(effect)") {{effect}}
+    select.btn.btn-primary(v-model="effect" @change="setEffect(effect)") {{effect}}
         option(v-for="e in effectors" :key="e.name" :value="e.name") {{e.name}}
     .d-flex.position-absolute.bg-dark.text-light.px-1(v-if="knobs.length" style="left:100%;z-index:666")
         Knob.mx-1(v-for="k,ki in knobs" :key="ki" :min="k.min" :max="k.max" v-model="k.value" @input="k.set($event)" :label="k.label" :size="30" :bottom="false")
@@ -16,7 +16,7 @@ export default {
     components: {Knob},
     data:()=>({
         events: {},
-        knobs: [], effect: 'Gain', engine: Tone.Gain,
+        knobs: [], effect: 'Compressor', engine: Tone.Compressor,
         effectors,
     }),
     props:{
@@ -50,7 +50,7 @@ export default {
         }
     },
     mounted(){
-        this.setEffect('Gain')
+        this.setEffect(this.effect)
     },
 }
 </script>

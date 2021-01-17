@@ -1,6 +1,6 @@
 <template lang="pug">
 .btn-group.btn-group-sm
-    .btn.btn-outline-secondary(@click="$refs['file'].click()") import
+    .btn.btn-success(@click="$refs['file'].click()") import
     input.d-none(ref="file" type="file" @change="importMIDI($event.target.files[0])")
 </template>
 

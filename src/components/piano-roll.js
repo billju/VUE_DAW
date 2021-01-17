@@ -5,7 +5,7 @@ export default {
 	components: { Scrollbar },
 	data: () => ({
 		// width height  八度 小節
-		grid: { W: 20, H: 20, octave: 8, beat: 8, tickH: 26, velH: 60, velSize: 4, blackKey: 40, whiteKey: 75, sliderSize: 16 },
+		grid: { W: 20, H: 20, octave: 8, beat: 8, tickH: 26, velH: 75, velSize: 4, blackKey: 40, whiteKey: 75, sliderSize: 16 },
 		ltr: false, // 畫面顯示方向
 		scrollTop: 0,
 		scrollLeft: 0,
@@ -84,19 +84,23 @@ export default {
 		scaleY(e) {
 			e.preventDefault();
 			let { x, y, rx, ry, cx, cy, note } = this.getGrid(e.clientX, e.clientY);
+			let { H, tickH, velH } = this.grid
+			let { width, height } = this.$refs.canvas
 			let delta = Math.sign(e.deltaY) * 2;
-			this.grid.H = this.minmax(this.grid.H - delta, 10, 30);
-			this.scrollTop += (1 - H / this.grid.H) * cy
+			this.grid.H = this.minmax(H - delta, 10, 30);
+			let offset = this.ltr ? cy : cx - width
+			this.scrollTop = (this.scrollTop + offset) * this.grid.H / H - offset
 		},
 		handleWheel(e) {
 			let { W, H, beat, tickH } = this.grid;
 			let { x, y, rx, ry, cx, cy, note } = this.getGrid(e.clientX, e.clientY);
 			let { width, height } = this.$refs.canvas
-			if (this.ltr && cy < tickH) {
+			if ((this.ltr && cy < tickH) || (!this.ltr && cx < tickH)) {
 				e.preventDefault();
 				let delta = Math.sign(e.deltaY) * 2;
 				this.grid.W = this.minmax(W - delta, 5, 25);
-				this.scrollLeft += (1 - W / this.grid.W) * cx
+				let offset = this.ltr ? cx : height - cy
+				this.scrollLeft = (this.scrollLeft + offset) * this.grid.W / W - offset
 			} else if (this.ltr) {
 				if (this.shiftKey)
 					if (this.freezeScroll && this.playing) return;
@@ -253,10 +257,8 @@ export default {
 				if (ey < sy) sy = [ey, (ey = sy)][0];
 				this.activeNotes = this.notes.filter((n) => n.x <= ex && sx < n.end && sy <= n.y && n.y <= ey);
 				this.activeNotes.map((n) => (n.a = true));
-				this.ranging = false;
 			} else if (this.resizing) {
 				this.lastNote = new Note(this.resizing.note);
-				this.resizing = false;
 			} else if (this.activeNotes.length) {
 				// 停止預覽播放
 				this.lastNote = new Note(this.activeNotes[0]);
@@ -265,7 +267,7 @@ export default {
 			} else {
 				for (let note in this.triggering) this.pianoEnd(107 - note.y);
 			}
-			this.ticking = this.deleting = this.velociting = false;
+			this.ticking = this.deleting = this.velociting = this.ranging = this.resizing = false;
 			this.mouse.button = -1;
 		},
 		// commands
@@ -396,7 +398,7 @@ export default {
 			this.addHistory();
 			let minX = Math.min(...this.clipboard.map((n) => n.x));
 			this.activeNotes.map((n) => (n.a = false));
-			let cloned = this.clipboard.map((n) => new Note({ ...n, x: this.mouse.x - minX }));
+			let cloned = this.clipboard.map((n) => new Note({ ...n, x: n.x + this.mouse.x - minX }));
 			this.notes.push(...cloned);
 			this.activeNotes = cloned;
 		},
@@ -456,8 +458,7 @@ export default {
 				case 'V':
 					if (e.ctrlKey) this.pasteNotes();
 					break;
-				case 'F':
-					if (e.ctrlKey) e.preventDefault();
+				case 'F2':
 					this.freezeScroll = !this.freezeScroll;
 					break;
 				case 'DELETE':
@@ -467,31 +468,48 @@ export default {
 					this.deleteNotes();
 					break;
 				case 'ARROWLEFT':
-					if (e.shiftKey) {
-						if (this.activeNotes.every((n) => n.l > 1)) this.activeNotes.map((n) => n.l--);
-					} else if (this.checkMovable(-1, 0)) this.activeNotes.map((n) => n.x--);
+					if (this.activeNotes.length && this.checkMovable(1, 0)) {
+						if (e.shiftKey) this.activeNotes.map((n) => n.l--);
+						else this.activeNotes.map((n) => n.x--);
+					} else if (!this.playing) {
+						if (this.ltr) this.scrollLeft -= this.grid.W
+						else this.scrollTop -= this.grid.H
+					}
 					break;
 				case 'ARROWRIGHT':
-					if (this.checkMovable(1, 0)) {
+					if (this.activeNotes.length && this.checkMovable(1, 0)) {
 						if (e.shiftKey) this.activeNotes.map((n) => n.l++);
 						else this.activeNotes.map((n) => n.x++);
+					} else if (!this.playing) {
+						if (this.ltr) this.scrollLeft += this.grid.W
+						else this.scrollTop += this.grid.H
 					}
 					break;
 				case 'ARROWDOWN':
-					if (e.shiftKey && this.activeNotes.length) {
-						let minY = Math.min(...this.activeNotes.map((n) => n.y));
-						let i = this.activeNotes.findIndex((n) => n.y == minY);
-						this.activeNotes[i].y += 12;
-						this.triggerSelection();
-					} else this.activeNotes.map((n) => n.y++);
+					if (this.activeNotes.length) {
+						if (e.shiftKey) {
+							let minY = Math.min(...this.activeNotes.map((n) => n.y));
+							let i = this.activeNotes.findIndex((n) => n.y == minY);
+							this.activeNotes[i].y += 12;
+							this.triggerSelection();
+						} else this.activeNotes.map((n) => n.y++);
+					} else if (!this.playing) {
+						if (this.ltr) this.scrollTop += this.grid.H
+						else this.scrollLeft -= this.grid.W
+					}
 					break;
 				case 'ARROWUP':
-					if (e.shiftKey && this.activeNotes.length) {
-						let maxY = Math.max(...this.activeNotes.map((n) => n.y));
-						let i = this.activeNotes.findIndex((n) => n.y == maxY);
-						this.activeNotes[i].y -= 12;
-						this.triggerSelection();
-					} else this.activeNotes.map((n) => n.y--);
+					if (this.activeNotes.length) {
+						if (e.shiftKey) {
+							let maxY = Math.max(...this.activeNotes.map((n) => n.y));
+							let i = this.activeNotes.findIndex((n) => n.y == maxY);
+							this.activeNotes[i].y -= 12;
+							this.triggerSelection();
+						} else this.activeNotes.map((n) => n.y--);
+					} else if (!this.playing) {
+						if (this.ltr) this.scrollTop -= this.grid.H
+						else this.scrollLeft += this.grid.W
+					}
 					break;
 				case 'Z':
 					if (e.ctrlKey) {
@@ -578,14 +596,16 @@ export default {
 				else ctx.fillText(i, 0, height - i * W * beat + this.scrollLeft)
 			}
 			// 範圍框
-			let { sx, sy, ex, ey } = this.range;
-			if (ex < sx) sx = [ex, (ex = sx)][0];
-			if (ey < sy) sy = [ey, (ey = sy)][0];
-			let rw = (ex - sx) * W
-			let rh = (ey - sy) * H
-			ctx.strokeStyle = 'dodgerblue'
-			if (this.ltr) ctx.strokeRect(sx * W - this.scrollLeft, sy * H - this.scrollTop, rw, rh)
-			else ctx.strokeRect(width - sy * H - this.scrollTop - rh, height - sx * W + this.scrollLeft - rw, rh, rw,)
+			if (this.ranging) {
+				let { sx, sy, ex, ey } = this.range;
+				if (ex < sx) sx = [ex, (ex = sx)][0];
+				if (ey < sy) sy = [ey, (ey = sy)][0];
+				let rw = (ex - sx) * W
+				let rh = (ey - sy) * H
+				ctx.strokeStyle = 'dodgerblue'
+				if (this.ltr) ctx.strokeRect(sx * W - this.scrollLeft, sy * H - this.scrollTop, rw, rh)
+				else ctx.strokeRect(width - sy * H - this.scrollTop - rh, height - sx * W + this.scrollLeft - rw, rh, rw,)
+			}
 			// 力度框
 			ctx.fillStyle = '#343a40'
 			if (this.ltr) ctx.fillRect(0, height - velH, width, velH)

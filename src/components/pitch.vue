@@ -1,7 +1,7 @@
 <template lang="pug">
-.btn.btn-outline-danger(v-if="stream" @click="stopMedia()" title="已開啟麥克風")
+.btn.btn-danger(v-if="stream" @click="stopMedia()" title="已開啟麥克風")
 	i.fa.fa-microphone
-.btn.btn-outline-secondary(v-else @click="getUserMedia()" title="已關閉麥克風")
+.btn.btn-secondary(v-else @click="getUserMedia()" title="已關閉麥克風")
 	i.fa.fa-microphone-slash
 </template>
 

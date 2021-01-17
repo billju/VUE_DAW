@@ -1,43 +1,45 @@
 <template lang="pug">
 .d-flex.flex-column.h-100
     //- ADSR(style="width:300px;height:200px")
-    .d-flex.flex-shrink-0.overflow-auto
+    .d-flex.flex-shrink-0.overflow-auto.bg-dark
         .btn-group.btn-group-sm.align-items-center.text-nowrap
             Knob(v-model="bpm" :min="40" :max="240" :size="40")
             //- BPM
-            .btn.btn-dark(contenteditable @blur="bpm=parseInt($event.target.textContent)||120" @keydown.enter="$event.target.blur()") {{bpm}}
-            .btn.btn-outline-primary(v-for="val,key in tempoDict" :key="key" :class="key==tempoName?'active':''" @click="bpm=val") {{key}}
+            button.btn.btn-info(contenteditable @blur="bpm=parseInt($event.target.textContent)||120" @keydown.enter="$event.target.blur()") {{bpm}}
+            button.btn.btn-primary(v-for="val,key in tempoDict" :key="key" :class="key==tempoName?'active':''" @click="bpm=val") {{key}}
             //- Piano Roll
-            .btn(:class="PR.historyIdx>1?'btn-outline-info':'d-none'" @click="PR.traceHistory(-1)")
+            button.btn(:class="PR.historyIdx>1?'btn-info':'d-none'" @click="PR.traceHistory(-1)")
                 i.fa.fa-undo
-            .btn(:class="PR.historyIdx<PR.histories.length-1?'btn-outline-info':'d-none'" @click="PR.traceHistory(1)")
+            button.btn(:class="PR.historyIdx<PR.histories.length-1?'btn-info':'d-none'" @click="PR.traceHistory(1)")
                 i.fa.fa-redo
-            .btn.btn-outline-danger(v-if="!PR.recording" @click="PR.record()")
+            button.btn.btn-danger(v-if="!PR.recording" @click="PR.record()")
                 i.fa.fa-circle
-            .btn.btn-outline-danger(v-if="PR.playing||PR.recording" @click="PR.stop()")
+            button.btn.btn-danger(title="停止" v-if="PR.playing||PR.recording" @click="PR.stop()")
                 i.fa.fa-stop
-            .btn.btn-outline-success(v-else @click="PR.play()")
+            button.btn.btn-success(title="播放" v-else @click="PR.play()")
                 i.fa.fa-play
-            .btn.btn-outline-success(v-if="PR.metronome" @click="PR.metronome=false" title="已開啟節拍器")
+            button.btn.btn-success(v-if="PR.metronome" @click="PR.metronome=false" title="已開啟節拍器")
                 i.fa.fa-headphones
-            .btn.btn-outline-secondary(v-else @click="PR.metronome=true" title="已關閉節拍器")
+            button.btn.btn-secondary(v-else @click="PR.metronome=true" title="已關閉節拍器")
                 i.fa.fa-volume-mute
-            .btn(title="鎖定橫向卷軸" :class="PR.freezeScroll?'btn-secondary':'btn-outline-secondary'" @click="PR.freezeScroll=!PR.freezeScroll")
+            button.btn(title="鎖定橫向卷軸(F2)" :class="PR.freezeScroll?'btn-success':'btn-secondary'" @click="PR.freezeScroll=!PR.freezeScroll")
                 i.fa.fa-fast-forward
-            .btn.btn-outline-secondary(@click="PR.randomVelocity()") random velocity
+            button.btn.btn-secondary(@click="PR.randomVelocity()") random velocity
             Pitch(ref="pitch" @noteOn="PR.pianoStart($event)" @noteOff="PR.pianoEnd($event)")
+            button.btn(title="切換螢幕鍵盤" :class="showKeyboard?'btn-success':'btn-secondary'" @click="showKeyboard=!showKeyboard")
+                i.fa.fa-circle-notch
             //- import, export
             MIDI(ref="midi" @decode="importMIDI($event)" 
                 @noteOn="PR.pianoStart($event.midi,$event.velocity)" 
                 @noteOff="PR.pianoEnd($event.midi)")
-            .btn.btn-outline-secondary(@click="$refs['midi'].encodeMIDI(bpm,PR.notes)") export
-            .btn.btn-outline-secondary(v-for="track,ti in tracks" :key="track.name" :class="ti==trackIndex?'active':''" @click="trackIndex=ti") {{track.name}}
+            button.btn.btn-danger(@click="$refs['midi'].encodeMIDI(bpm,PR.notes)") export
+            button.btn.btn-secondary(v-for="track,ti in tracks" :key="track.name" :class="ti==trackIndex?'active':''" @click="trackIndex=ti") {{track.name}}
             Effector(v-if="tracks.length" :key="trackIndex" :source="tracks[trackIndex].instrument")
     PianoRoll(
         ref="pianoRoll" :bpm="bpm" :tracks="tracks" :trackIndex="trackIndex" @mic-sample="$refs['pitch'].sample()"
         @metronome="metronome.triggerAttackRelease($event,'8n')" @notes="tracks[trackIndex].notes=$event"
     )
-    .position-fixed(style="top:0;right:20px")
+    .position-fixed(v-if="showKeyboard" style="left:50%;top:50%;transform:translate(-50%,-50%)")
         PianoKeyboard(@noteOn="PR.pianoStart($event.midi)" @noteOff="PR.pianoEnd($event.midi)")
 </template>
 <script>
@@ -57,7 +59,7 @@ export default {
         events: {}, bpm: 132, 
         PR: {histories:[]}, 
         sampler: {}, drum: {}, synth: {},
-        trackIndex: 0, tracks: [],
+        trackIndex: 0, tracks: [], showKeyboard: false,
         tempoDict: {
             Largo: 40,
             Adagio: 66,

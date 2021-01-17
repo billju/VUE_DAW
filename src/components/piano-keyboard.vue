@@ -1,11 +1,11 @@
 <template lang="pug">
 .btn-group
-    .position-relative(v-if="show")
-        .btn.p-0(v-for='(pk,pi) in pianoKeys' :key='pi' :style='pianoKeyStyle(pk)' 
+    .d-flex
+        .btn.p-0.position-relative(v-for='(pk,pi) in pianoKeys' :key='pi' :style='pianoKeyStyle(pk)' 
             @mouseenter='handleEnter(pk)' @mouseleave='handleLeave(pk)')
-            div(:style='charStyle(pk)') {{pk.char}}
+            .w-100.position-absolute.text-center.p-1(:style="{bottom:0,color: pk.press?'white':'grey'}") {{pk.char}}
     .h-100.btn-group-vertical.btn-group-sm
-        .btn(:class="show?'btn-light':'btn-dark'" @click="show=!show")
+        .btn.btn-dark
             i.fa.fa-circle-notch
         .btn.btn-dark(@click="setOctave(1)" title="PageUp")
             i.fa.fa-caret-up
@@ -16,7 +16,7 @@
 <script>
 export default {
     data:()=>({
-        events: {}, mouse:{active:false,pianoKey:null}, show: false, octave: 4,
+        events: {}, mouse:{active:false,pianoKey:null}, octave: 4,
     }),
     props:{
         pianoKeys: {
@@ -55,12 +55,6 @@ export default {
                 {char: '=', midi: 78, black:true, press:false},
                 {char: ']', midi: 79, black:false, press:false},
             ]),
-            // default: () => Array.from(Array(12*7).keys(),i=>({
-            //     char:i+24+'',
-            //     midi:i+24,
-            //     black:[1,3,6,8,10].includes(i%12),
-            //     press: false,
-            // })),
         }
     },
     methods:{
@@ -126,7 +120,6 @@ export default {
             return pianoKey.black?{
                 width: '20px',
                 height: '80px',
-                position: 'absolute',
                 top: 0,
                 marginLeft: '-10px',
                 marginRight: '-10px',
@@ -135,21 +128,11 @@ export default {
             }:{
                 width: '30px',
                 height: '120px',
-                position: 'relative',
                 zIndex: 69,
                 border: '1px solid #eee',
                 background: '#333333',
             }
         },
-        charStyle(pianoKey){
-            return {
-                position: 'absolute',
-                bottom: '5px',
-                width: '100%',
-                textAlign: 'center',
-                color: pianoKey.press?'white':'grey'
-            }
-        }
     },
     mounted(){
         this.events = {

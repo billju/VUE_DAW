@@ -23,6 +23,7 @@ export default {
     methods:{
         minmax(input,min,max){return input>max?max:input<min?min:input},
         handleStart(e){
+            e.stopPropagation()
             this.active = true
             this.last = this.ltr?e.clientX:e.clientY
             this.handleMove(e)

@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vue-piano-roll</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" />
+    <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
+    <script src="https://unpkg.com/@tonejs/midi@2.0.25/build/Midi.js"></script>
+    <script src="https://unpkg.com/vue@2.6.12/dist/vue.js"></script>
+</head>
+
+<body>
+    <div id="app" class="d-flex flex-column vw-100 vh-100">
+        <div class="d-flex flex-shrink-0 overflow-auto bg-dark">
+            <div class="btn-group btn-group-sm align-items-center text-nowrap">
+                <Knob v-model="bpm" :min="40" :max="240" :size="40"></Knob>
+                <div class="btn btn-info" contenteditable @blur="bpm=parseInt($event.target.textContent)||120"
+                    @keydown.enter="$event.target.blur()">{{bpm}}</div>
+                <button class="btn btn-primary" v-for="val,key in tempoDict" :key="key"
+                    :class="key==tempoName?'active':''" @click="bpm=val">{{key}} </button>
+                <button class="btn" :class="PR.historyIdx>1?'btn-info':'d-none'" @click="PR.traceHistory(-1)">
+                    <i class="fa fa-undo"></i>
+                </button>
+                <button class="btn" :class="PR.historyIdx<PR.histories.length-1?'btn-info':'d-none'"
+                    @click="PR.traceHistory(1)">
+                    <i class="fa fa-redo"></i>
+                </button>
+                <button class="btn btn-danger" v-if="!PR.recording" @click="PR.record()">
+                    <i class="fa fa-circle"></i>
+                </button>
+                <button class="btn btn-danger" title="停止" v-if="PR.playing||PR.recording" @click="PR.stop()">
+                    <i class="fa fa-stop"></i>
+                </button>
+                <button class="btn btn-success" title="播放" v-else @click="PR.play()">
+                    <i class="fa fa-play"></i>
+                </button>
+                <button class="btn btn-success" v-if="PR.metronome" @click="PR.metronome=false" title="已開啟節拍器">
+                    <i class="fa fa-headphones"></i>
+                </button>
+                <button class="btn btn-secondary" v-else @click="PR.metronome=true" title="已關閉節拍器">
+                    <i class="fa fa-volume-mute"></i>
+                </button>
+                <button class="btn" title="鎖定橫向卷軸(F2)" :class="PR.freezeScroll?'btn-success':'btn-secondary'"
+                    @click="PR.freezeScroll=!PR.freezeScroll">
+                    <i class="fa fa-fast-forward"></i>
+                </button>
+                <button class="btn btn-secondary" @click="PR.randomVelocity()">random velocity</button>
+                <button class="btn" title="切換螢幕鍵盤" :class="showKeyboard?'btn-success':'btn-secondary'"
+                    @click="showKeyboard=!showKeyboard">
+                    <i class="fa fa-circle-notch"> </i>
+                </button>
+                <button class="btn btn-sm btn-success" @click="$refs['file'].click()">import
+                    <input class="d-none" ref="file" type="file" @change="importMIDI($event.target.files[0])" />
+                </button>
+                <button class="btn btn-danger" @click="encodeMIDI(bpm,PR.notes)">export</button>
+                <button class="btn btn-secondary" v-for="track,ti in tracks" :key="track.name"
+                    :class="ti==trackIndex?'active':''" @click="trackIndex=ti">{{track.name}}</button>
+                <Effector v-if="tracks.length" :key="trackIndex" :source="tracks[trackIndex].instrument" />
+            </div>
+        </div>
+        <PianoRoll ref="pianoRoll" :bpm="bpm" :tracks="tracks" :track-index="trackIndex"
+            @mic-sample="$refs['pitch'].sample()" @metronome="metronome.triggerAttackRelease($event,'8n')"
+            @notes="tracks[trackIndex].notes=$event"></PianoRoll>
+        <Keyboard v-if="showKeyboard" class="position-fixed shadow-lg"
+            style="left:50%;top:50%;transform:translate(-50%,-50%)" @note-on="PR.pianoStart($event.midi)"
+            @note-off="PR.pianoEnd($event.midi)" />
+    </div>
+
+</body>
+<style>
+    .slider {
+        background: #0097a7;
+    }
+
+    .slider:hover {
+        background: #00bcd4;
+    }
+
+    .slider:active {
+        background: #4dd0e1;
+    }
+</style>
+<script>
+    class Note {
+        constructor(config = {}) {
+            Object.assign(this, config);
+            this.i = '_' + Math.random().toString(36).slice(2);
+        }
+        i = ''; // 索引id
+        a = false; // 編輯中active(背景會改變)
+        x = 0; // 座標x
+        y = 0; // 座標y
+        l = 1; // 長度length
+        v = 30; // 力度velocity
+        p = false; // 播放中playing
+        // 頻率frequency
+        get f() {
+            let midi = 107 - this.y;
+            let freq = 440 * Math.pow(2, (midi - 69) / 12);
+            return Math.round(freq);
+        }
+        // 座標x尾端
+        get end() {
+            return this.x + this.l;
+        }
+    }
+    const NormalRange = { min: 0, max: 1, value: 0.5 }
+    const Time = { min: 0, max: 1, value: 0.1 }
+    const Positive = { min: 0, max: 10, value: 1 }
+    const Cents = { min: -100, max: 100, value: 0 }
+    const Frequency = { min: 80, max: 3600, value: 440 }
+    const Decibels = { min: 0, max: 80, value: 50 }
+    const Degrees = { min: 0, max: 360, value: 0 }
+    const OscillatorType = ['fatsine', 'fatsquare', 'fatsawtooth', 'fattriangle', 'fatcustom', 'fmsine', 'fmsquare', 'fmsawtooth', 'fmtriangle', 'fmcustom', 'amsine', 'amsquare', 'amsawtooth', 'amtriangle', 'amcustom', 'pulse', 'pwm']
+    const BiquadFilterType = ['lowpass', 'highpass', 'bandpass', 'lowshelf', 'highshelf', 'notch', 'allpass', 'peaking']
+    const Bool = ['on', 'off']
+    const Effects = [
+        { name: 'Gain', engine: Tone.Gain, knobs: { gain: NormalRange, }, menus: {}, },
+        { name: 'AutoPanner', engine: Tone.AutoPanner, knobs: { depth: NormalRange, frequency: Frequency, wet: NormalRange, }, menus: { type: OscillatorType, }, },
+        { name: 'AutoWah', engine: Tone.AutoWah, knobs: { Q: Positive, baseFrequency: Frequency, gain: NormalRange, octaves: Positive, sensitivity: Decibels, wet: NormalRange, }, menus: {}, },
+        { name: 'BitCrusher', engine: Tone.BitCrusher, knobs: { bits: Positive, wet: NormalRange, }, menus: {}, },
+        { name: 'BiqualFilter', engine: Tone.BiquadFilter, knobs: { Q: Positive, detune: Cents, frequency: Frequency, gain: NormalRange, }, menus: { type: BiquadFilterType, }, },
+        { name: 'Compressor', engine: Tone.Compressor, knobs: { attack: Time, knee: Decibels, ratio: Positive, release: Time, threshold: Decibels, }, menus: {}, },
+        { name: 'Convolver', engine: Tone.Convolver, knobs: {}, menus: { normalize: Bool, url: ['string|AudioBuffer|ToneAudioBuffer'] }, },
+        { name: 'Chorus', engine: Tone.Chorus, knobs: { delayTime: Time, depth: NormalRange, feedback: NormalRange, frequency: Frequency, spread: Degrees, wet: NormalRange, }, menus: { type: OscillatorType, }, },
+        { name: 'Distortion', engine: Tone.Distortion, knobs: { distortion: Positive, wet: NormalRange, }, menus: {}, },
+        { name: 'EQ3', engine: Tone.EQ3, knobs: { high: { min: 0, max: 0.5, value: 0.25 }, highFrequency: { min: 2000, max: 2e4, value: 6000 }, low: { min: 0, max: 0.5, value: 0.25 }, lowFrequency: { min: 20, max: 440, value: 220 }, mid: { min: 0, max: 0.5, value: 0.25 }, }, menus: {}, },
+        { name: 'Delay', engine: Tone.FeedbackDelay, knobs: { delayTime: Time, feedback: NormalRange, maxDelay: Time, wet: NormalRange, }, menus: {}, },
+        { name: 'Phaser', engine: Tone.Phaser, knobs: { Q: Positive, baseFrequency: Frequency, frequency: Frequency, octaves: Positive, stages: Positive, wet: NormalRange, }, menus: {}, },
+        { name: 'Reverb', engine: Tone.Reverb, knobs: { decay: Time, preDelay: Time, wet: NormalRange, }, menus: {}, },
+        { name: 'Tremolo', engine: Tone.Tremolo, knobs: { depth: NormalRange, frequency: Frequency, spread: Degrees, wet: NormalRange, }, menus: { type: OscillatorType, }, },
+    ]
+    Vue.component('Knob', {
+        template: `<div class="d-flex align-items-center">
+            <div class="position-relative" :style="containerStyle" @mousedown="handleEventStart" @touchstart="handleEventStart">
+                <div :style="dialStyle">
+                    <div class="position-absolute" :style="pointerStyle"></div>
+                </div>
+                <svg class="w-100 h-100" viewBox="0 0 100 100">
+                    <path :style="pathStyle" d="M20,76 A 40 40 0 1 1 80 76" stroke="#333333" fill="none"></path>
+                    <path :style="pathStyle" d="M20,76 A 40 40 0 1 1 80 76" stroke="#16FFBD" :stroke-dashoffset="Math.round(184-pct*184)" fill="none"></path>
+                </svg>
+            </div>
+            <span :title="value">{{label}}</span>
+        </div>`,
+        data: () => ({
+            val: 0.5, coord: { x: 0, y: 0 }, active: false, events: {},
+        }),
+        props: {
+            max: { type: Number, default: 1 },
+            min: { type: Number, default: 0 },
+            step: { type: Number, default: 0.01 },
+            value: { type: Number, default: 0.5 },
+            label: { type: String, default: '' },
+            size: { type: Number, default: 100 },
+            bottom: { type: Boolean, default: true },
+        },
+        methods: {
+            getCoord(e) {
+                return {
+                    x: e.clientX == undefined ? e.targetTouches[0].pageX : e.clientX,
+                    y: e.clientY == undefined ? e.targetTouches[0].pageY : e.clientY
+                }
+            },
+            handleEventStart(e) {
+                this.active = true
+                this.coord = this.getCoord(e)
+                this.val = this.value
+            },
+            handleEventMove(e) {
+                if (this.active) {
+                    e.preventDefault()
+                    let { val, coord } = this.$data
+                    let { max, min, step } = this.$props
+                    let { x, y } = this.getCoord(e)
+                    let dx = coord.x - x
+                    let dy = coord.y - y
+                    val += (dy - dx) * (max - min) * 0.005
+                    val = (val > max) ? max : (val < min) ? min : val
+                    let emitValue = Math.round(val / step) * step
+                    emitValue = Math.round(emitValue * 100) / 100 //deal with float flush
+                    this.$emit('input', emitValue)
+                }
+            },
+            handleEventEnd() {
+                this.active = false
+            }
+        },
+        computed: {
+            pct() {
+                let { value, max, min } = this.$props
+                value = (value > max) ? max : (value < min) ? min : value
+                return (value - min) / (max - min)
+            },
+            containerStyle() {
+                return {
+                    width: `${this.size}px`,
+                    height: `${this.size}px`,
+                    flexDirection: this.bottom ? 'column' : 'row',
+                    cursor: 'pointer',
+                }
+            },
+            dialStyle() {
+                return {
+                    position: 'absolute',
+                    width: '72%',
+                    height: '72%',
+                    top: '14%',
+                    left: '14%',
+                    transform: `rotate(${-132 + this.pct * 264}deg)`,
+                    background: '#447799',
+                    boxShadow: '0 0 0 2px rgba(0, 0, 0, 0.2) inset',
+                    borderRadius: '50%',
+                }
+            },
+            pointerStyle() {
+                return {
+                    position: 'absolute',
+                    height: '6%', //20%
+                    width: '6%',
+                    top: '15%',
+                    left: '50%',
+                    background: '#fff',
+                }
+            },
+            pathStyle() {
+                return {
+                    strokeWidth: '10px',
+                    strokeDasharray: '184',
+                    transition: '0.15s',
+                }
+            }
+        },
+        mounted() {
+            this.events = {
+                mousemove: e => this.handleEventMove(e),
+                touchmove: e => this.handleEventMove(e),
+                mouseup: e => this.handleEventEnd(e),
+                mouseleave: e => this.handleEventEnd(e),
+                touchend: e => this.handleEventEnd(e),
+                touchcancel: e => this.handleEventEnd(e),
+            }
+            for (let name in this.events)
+                window.addEventListener(name, this.events[name], { passive: false })
+        },
+        beforeDestroy() {
+            for (let name in this.events)
+                window.removeEventListener(name, this.events[name], { passive: false })
+        }
+    })
+    Vue.component('Scrollbar', {
+        template: `<div class="position-absolute" :style="scrollStyle" @mousedown="handleStart($event.clientX,$event.clientY,$event)">
+            <div class="slider position-absolute" :style="sliderStyle"></div>
+        </div> `,
+        data: () => ({
+            active: false,
+            last: 0,
+        }),
+        props: {
+            ltr: Boolean,
+            clientSize: Number,
+            scrollSize: Number,
+            value: Number,
+            sliderSize: { type: Number, default: 22, }
+        },
+        methods: {
+            minmax(input, min, max) { return input > max ? max : input < min ? min : input },
+            handleStart(cx, cy, e) {
+                e.stopPropagation()
+                this.active = true
+                this.last = this.ltr ? cx : cy
+                this.handleMove(cx, cy)
+            },
+            handleMove(cx, cy) {
+                if (this.active) {
+                    let V = this.value
+                    let S = this.scrollSize
+                    let C = this.clientSize
+                    let diff = (this.ltr ? cx : cy) - this.last
+                    let dv = diff * (S - C) / C
+                    let newV = V + (this.ltr ? dv : -dv)
+                    newV = this.minmax(newV, 0, S - C)
+                    this.$emit('input', newV)
+                    this.last += diff
+                }
+            }
+        },
+        computed: {
+            scrollStyle() {
+                return this.ltr
+                    ? { bottom: 0, left: 0, right: 0, height: this.sliderSize + 'px', }
+                    : { top: 0, bottom: 0, right: 0, width: this.sliderSize + 'px', }
+            },
+            sliderStyle() {
+                let V = this.value
+                let S = this.scrollSize
+                let C = this.clientSize
+                let pct = this.minmax(V / (S - C), 0, (S - C) / S)
+                return this.ltr
+                    ? { width: C / S * 100 + '%', height: this.sliderSize + 'px', left: pct * 100 + '%', }
+                    : { height: C / S * 100 + '%', width: this.sliderSize + 'px', bottom: pct * 100 + '%', }
+            }
+        },
+        mounted() {
+            this.events = {
+                mousemove: e => this.handleMove(e.clientX, e.clientY),
+                mouseup: e => this.active = false,
+            }
+            for (let name in this.events) window.addEventListener(name, this.events[name])
+        },
+        beforeDestroy() {
+            for (let name in this.events) window.removeEventListener(name, this.events[name])
+        },
+    })
+    Vue.component('Effector', {
+        template: `<div class="btn-group btn-group-sm position-relative">
+            <select class="btn btn-primary" v-model="effect" @change="setEffect(effect)">
+                <option v-for="e in Effects" :key="e.name" :value="e.name">{{e.name}} </option>
+            </select>
+            <div class="d-flex position-absolute bg-dark text-light px-1" v-if="knobs.length" style="left:100%;z-index:666">
+                <Knob class="mx-1" v-for="k,ki in knobs" :key="ki" :min="k.min" :max="k.max" v-model="k.value" @input="k.set($event)" :label="k.label" :size="30" :bottom="false" />
+            </div>
+        </div>`,
+        data: () => ({
+            events: {},
+            knobs: [], effect: 'Compressor', engine: Tone.Compressor,
+            Effects,
+        }),
+        props: {
+            source: { type: Object },
+        },
+        methods: {
+            setEffect(effect) {
+                let idx = this.Effects.findIndex(e => e.name == effect)
+                if (idx !== -1) {
+                    this.source.disconnect(this.engine)
+                    let Engine = this.Effects[idx].engine
+                    this.engine = new Engine().toDestination()
+                    // create knobs
+                    let knobs = this.Effects[idx].knobs
+                    this.knobs = []
+                    for (let key in knobs)
+                        this.knobs.push({
+                            label: key,
+                            min: knobs[key].min,
+                            max: knobs[key].max,
+                            value: knobs[key].value,
+                            step: 0.1,
+                            set: (value) => this.engine.set(Object.fromEntries([[key, value]]))
+                        })
+                    this.source.connect(this.engine)
+                }
+            }
+        },
+        mounted() {
+            this.setEffect(this.effect)
+        },
+    })
+    Vue.component('Keyboard', {
+        template: `
+        <div class="btn-group">
+            <div class="d-flex">
+                <div class="btn p-0 position-relative" v-for="pk,pi in pianoKeys" :key="pi" :style="pianoKeyStyle(pk)" @mouseenter="handleEnter(pk)" @mouseleave="handleLeave(pk)">
+                    <div class="w-100 position-absolute text-center p-1" :style="{bottom:0,color: pk.press?'white':'grey'}">{{pk.char}}</div>
+                </div>
+            </div>
+            <div class="h-100 btn-group-vertical btn-group-sm">
+                <div class="btn btn-dark">
+                    <i class="fa fa-circle-notch"></i>
+                </div>
+                <div class="btn btn-dark" @click="setOctave(1)" title="PageUp">
+                    <i class="fa fa-caret-up"></i>
+                </div>
+                <div class="btn btn-dark">{{octave}}</div>
+                <div class="btn btn-dark" @click="setOctave(-1)" title="PageDown">
+                    <i class="fa fa-caret-down"></i>
+                </div>
+            </div>
+        </div>`,
+        data: () => ({
+            events: {}, mouse: { active: false, pianoKey: null }, octave: 4,
+        }),
+        props: {
+            pianoKeys: {
+                type: Array,
+                default: () => ([
+                    { char: 'Z', midi: 48, black: false, press: false },
+                    { char: 'S', midi: 49, black: true, press: false },
+                    { char: 'X', midi: 50, black: false, press: false },
+                    { char: 'D', midi: 51, black: true, press: false },
+                    { char: 'C', midi: 52, black: false, press: false },
+                    { char: 'V', midi: 53, black: false, press: false },
+                    { char: 'G', midi: 54, black: true, press: false },
+                    { char: 'B', midi: 55, black: false, press: false },
+                    { char: 'H', midi: 56, black: true, press: false },
+                    { char: 'N', midi: 57, black: false, press: false },
+                    { char: 'J', midi: 58, black: true, press: false },
+                    { char: 'M', midi: 59, black: false, press: false },
+                    { char: 'Q', midi: 60, black: false, press: false },
+                    { char: '2', midi: 61, black: true, press: false },
+                    { char: 'W', midi: 62, black: false, press: false },
+                    { char: '3', midi: 63, black: true, press: false },
+                    { char: 'E', midi: 64, black: false, press: false },
+                    { char: 'R', midi: 65, black: false, press: false },
+                    { char: '5', midi: 66, black: true, press: false },
+                    { char: 'T', midi: 67, black: false, press: false },
+                    { char: '6', midi: 68, black: true, press: false },
+                    { char: 'Y', midi: 69, black: false, press: false },
+                    { char: '7', midi: 70, black: true, press: false },
+                    { char: 'U', midi: 71, black: false, press: false },
+                    { char: 'I', midi: 72, black: false, press: false },
+                    { char: '9', midi: 73, black: true, press: false },
+                    { char: 'O', midi: 74, black: false, press: false },
+                    { char: '0', midi: 75, black: true, press: false },
+                    { char: 'P', midi: 76, black: false, press: false },
+                    { char: '[', midi: 77, black: false, press: false },
+                    { char: '=', midi: 78, black: true, press: false },
+                    { char: ']', midi: 79, black: false, press: false },
+                ]),
+            }
+        },
+        methods: {
+            getFreq(pianoKey) {
+                return Math.round(440 * Math.pow(2, (pianoKey.midi - 69) / 12))
+            },
+            getPianoKey(keyChar) {
+                keyChar = keyChar.toUpperCase()
+                let idx = this.pianoKeys.findIndex(x => x.char.toUpperCase() == keyChar)
+                if (idx === -1) return null
+                return this.pianoKeys[idx]
+            },
+            handleEnter(pianoKey) {
+                this.mouse.pianoKey = pianoKey
+                if (this.mouse.active)
+                    this.noteOn(pianoKey)
+            },
+            handleLeave(pianoKey) {
+                this.mouse.pianoKey = null
+                this.noteOff(pianoKey)
+            },
+            handleMousedown(e) {
+                this.mouse.active = true
+                if (this.mouse.pianoKey)
+                    this.noteOn(this.mouse.pianoKey)
+            },
+            handleMouseup(e) {
+                this.mouse.active = false
+                if (this.mouse.pianoKey)
+                    this.noteOff(this.mouse.pianoKey)
+            },
+            setOctave(offset = 1) {
+                for (let pk of this.pianoKeys) {
+                    if (pk.press) this.noteOff(pk)
+                    pk.midi += 12 * offset
+                }
+                this.octave += offset
+            },
+            handleKeydown(e) {
+                if (e.ctrlKey) return
+                else if (e.key == 'PageUp') { e.preventDefault(); this.setOctave(1) }
+                else if (e.key == 'PageDown') { e.preventDefault(); this.setOctave(-1) }
+                this.noteOn(this.getPianoKey(e.key))
+            },
+            handleKeyup(e) {
+                this.noteOff(this.getPianoKey(e.key))
+            },
+            noteOn(pianoKey) {
+                if (!pianoKey) return
+                let { midi } = pianoKey
+                if (!pianoKey.press)
+                    this.$emit('note-on', { v: 72, midi })
+                pianoKey.press = true
+            },
+            noteOff(pianoKey) {
+                if (!pianoKey || !pianoKey.press) return
+                let { midi } = pianoKey
+                if (pianoKey.press)
+                    this.$emit('note-off', { v: 72, midi })
+                pianoKey.press = false
+            },
+            pianoKeyStyle(pianoKey) {
+                return pianoKey.black ? {
+                    width: '20px',
+                    height: '80px',
+                    top: 0,
+                    marginLeft: '-10px',
+                    marginRight: '-10px',
+                    zIndex: 99,
+                    background: '#16FFBD',
+                } : {
+                        width: '30px',
+                        height: '120px',
+                        zIndex: 69,
+                        border: '1px solid #eee',
+                        background: '#333333',
+                    }
+            },
+        },
+        mounted() {
+            this.events = {
+                keydown: e => this.handleKeydown(e),
+                keyup: e => this.handleKeyup(e),
+                mousedown: e => this.handleMousedown(e),
+                mouseup: e => this.handleMouseup(e),
+                mouseleave: e => this.handleMouseup(e),
+            }
+            for (let name in this.events)
+                window.addEventListener(name, this.events[name])
+        },
+        beforeDestroy() {
+            for (let name in this.events)
+                window.removeEventListener(name, this.events[name])
+        },
+    })
+    Vue.component('Pianoroll', {
+        template: `<div class="d-flex flex-grow-1" :class="ltr?'':'flex-column-reverse'" style="user-select:none" :style="{cursor}" @contextmenu.prevent="">
+            <div class="d-flex flex-shrink-0 bg-dark" :class="ltr?'flex-column':''">
+                <div class="btn btn-dark flex-grow-0 p-0" :style="{writingMode:ltr?'horizontal-tb':'vertical-lr'}" @click="toggleDisplay()">{{ltr?'編輯':'練琴'}}</div>
+                <div class="d-flex flex-grow-1 position-relative overflow-hidden" @wheel="scaleY($event)" :style="ltr?{width:grid.whiteKey+'px'}:{height:grid.whiteKey+'px'}">
+                    <div class="position-absolute text-dark" v-for="pG,pi in pianoGrids" :key="pi" :style="pG.style" :class="pG.class" @mousedown="pianoStart(107-pi)">{{pG.content}} </div>
+                </div>
+                <div class="overflow-auto hide-scrollbar" :style="{flex:'0 0 '+grid.whiteKey+'px',maxHeight:grid.velH+grid.sliderSize+'px'}">
+                    <div class="small text-center" v-for="val,name in chords" :key="name" @click="chordType=name" :class="chordType==name?'text-light bg-secondary':'text-muted bg-dark'">{{name}} </div>
+                </div>
+            </div>
+            <div class="d-flex flex-grow-1 position-relative overflow-hidden" ref="scroller" @wheel="handleWheel($event)" @mousedown="handleStart($event)">
+                <canvas class="flex-grow-1 w-100 h-100 position-absolute" ref="canvas"></canvas>
+                <Scrollbar class="position-absolute" :style="ltr?{left:0,bottom:0}:{right:0,top:0}" :clientSize="scrollBound.clientSize" :scrollSize="scrollSize" v-model="scrollLeft" :sliderSize="grid.sliderSize" :ltr="ltr"></Scrollbar>
+            </div>
+        </div>`,
+        name: 'piano-roll',
+        data: () => ({
+            // width height  八度 小節
+            grid: { W: 20, H: 20, octave: 8, beat: 8, tickH: 26, velH: 75, velSize: 4, blackKey: 40, whiteKey: 75, sliderSize: 16 },
+            ltr: false, // 畫面顯示方向
+            scrollTop: 0.1,
+            scrollLeft: 0,
+            lastNote: new Note(),
+            chordType: 'mono', // 新增音符類型(可快速添加和弦)
+            chords: {
+                mono: [0],
+                major: [0, 4, 7],
+                minor: [0, 3, 7],
+                major7: [0, 4, 7, 11],
+                minor7: [0, 3, 7, 10],
+            },
+            activeNotes: [], // 編輯中的音符
+            clipboard: [], // 複製中的音符
+            dragging: null, // 拖曳中的音符
+            ticking: false, // 調整時間軸
+            recording: false, // 錄音中
+            velociting: false, // 調整力度
+            resizing: false, // 調整音符長短(Boolean或{ dir: 'left', note })
+            resizeBuffer: 6, // 調整音符長短的pixel緩衝範圍
+            playing: false, // 播放中
+            range: { sx: 0, sy: 0, ex: 0, ey: 0 }, // 選取範圍
+            ranging: false, // 選取範圍中
+            cursor: 'auto', // css鼠標
+            mouse: { button: -1, x: 0, y: 0, clientX: 0, clientY: 0 },
+            deleting: false, // 正在按右鍵刪除
+            ctrlKey: false,
+            shiftKey: false,
+            triggering: [], // 觸發中的音符
+            playX: -1, // 播放點(整數X)
+            lastX: -1, // 上個播放點
+            floatX: 0, // 浮點數X
+            playTimeout: null, // 播放計時器
+            freezeScroll: false, // 鎖定卷軸
+            historyIdx: 0, // 歷史紀錄指標
+            histories: [], // 歷史紀錄
+            events: {},
+        }),
+        props: {
+            bpm: { type: Number, default: 128 }, // beats per minute
+            tracks: { type: Array, default: () => [] }, // 音軌
+            trackIndex: { type: Number, default: 0 }, // 音軌索引
+            metronome: { type: Boolean, default: false }, // 節拍器開關
+            activeColor: { type: String, default: 'rgba(255, 163, 164)' }, // 編輯中底色
+        },
+        methods: {
+            // utils
+            minmax(input, min, max) {
+                return input > max ? max : input < min ? min : input;
+            },
+            grid2label(y) {
+                let { octave } = this.grid;
+                let notes = ['B', 'A#', 'A', 'G#', 'G', 'F#', 'F', 'E', 'D#', 'D', 'C#', 'C'];
+                let note = notes[y % 12] + Math.floor((octave * 12 - y - 1) / 12);
+                return note;
+            },
+            getGrid(cx, cy) {
+                let { top, left, right, bottom } = this.$refs['scroller'].getBoundingClientRect();
+                let { W, H, octave } = this.grid;
+                let rx = this.ltr ? cx - left + this.scrollLeft : this.scrollLeft - cy + bottom;
+                let ry = this.ltr ? cy - top + this.scrollTop : right - cx - this.scrollTop;
+                cx -= left
+                cy -= top
+                let x = Math.floor(rx / W);
+                let y = Math.floor(ry / H);
+                let note = this.notes.filter((n) => n.x <= x && x < n.end && n.y == y)[0];
+                return { x, y, rx, ry, cx, cy, note };
+            },
+            checkMovable(dx, dy) {
+                let { octave, beat } = this.grid;
+                let xs = this.activeNotes.map((n) => n.x + dx).every((x) => 0 <= x);
+                let ys = this.activeNotes.map((n) => n.y + dy).every((y) => 0 <= y && y < octave * 12);
+                return xs && ys;
+            },
+            // mouse-events
+            scaleY(e) {
+                e.preventDefault();
+                let { x, y, rx, ry, cx, cy, note } = this.getGrid(e.clientX, e.clientY);
+                let { H, tickH, velH } = this.grid
+                let { width, height } = this.$refs.canvas
+                let delta = Math.sign(e.deltaY) * 2;
+                this.grid.H = this.minmax(H - delta, 10, 30);
+                let offset = this.ltr ? cy : cx - width
+                this.scrollTop = (this.scrollTop + offset) * this.grid.H / H - offset
+            },
+            handleWheel(e) {
+                let { W, H, beat, tickH } = this.grid;
+                let { x, y, rx, ry, cx, cy, note } = this.getGrid(e.clientX, e.clientY);
+                let { width, height } = this.$refs.canvas
+                if ((this.ltr && cy < tickH) || (!this.ltr && cx < tickH)) {
+                    e.preventDefault();
+                    let delta = Math.sign(e.deltaY) * 2;
+                    this.grid.W = this.minmax(W - delta, 5, 25);
+                    let offset = this.ltr ? cx : height - cy
+                    this.scrollLeft = (this.scrollLeft + offset) * this.grid.W / W - offset
+                } else if (this.ltr) {
+                    if (this.shiftKey)
+                        if (this.freezeScroll && this.playing) return;
+                        else this.scrollLeft += Math.sign(e.deltaY) * W * beat;
+                    else this.scrollTop += Math.sign(e.deltaY) * H * 4;
+                } else {
+                    if (this.shiftKey) this.scrollTop += Math.sign(e.deltaY) * H * 4;
+                    else if (this.freezeScroll && this.playing) return;
+                    else this.scrollLeft -= Math.sign(e.deltaY) * W * beat;
+                }
+            },
+            setVelocity(e) {
+                let { x, y, rx, ry, cx, cy, note } = this.getGrid(e.clientX, e.clientY);
+                let { velH, velSize } = this.grid;
+                let { width, height } = this.$refs.canvas
+                let size = velH - velSize
+                let h = this.ltr ? cy + size - height : cx + size - width;
+                let velocity = 127 - this.minmax(parseInt((h / size) * 127), 0, 127);
+                let notes = this.activeNotes.length ? this.activeNotes : this.notes;
+                notes
+                    .filter((n) => n.x <= x && x < n.end)
+                    .map((n) => (n.v = velocity));
+            },
+            handleStart(e) {
+                let { x, y, rx, ry, cx, cy, note } = this.getGrid(e.clientX, e.clientY);
+                let { width, height } = this.$refs.canvas
+                let { W, tickH, velH } = this.grid;
+                this.mouse = { button: e.button, x, y, clientX: e.clientX, clientY: e.clientY };
+                if (e.button == 0) {
+                    if (this.ltr && cy < tickH) this.ticking = true
+                    else if (!this.ltr && cx < tickH) this.ticking = true
+                    else if (this.ltr && cy > height - velH) this.velociting = true
+                    else if (!this.ltr && cx > width - velH) this.velociting = true
+                    else if (this.ctrlKey) {
+                        // 選取範圍
+                        this.clearSelection();
+                        this.ranging = true;
+                        this.range.sx = x;
+                        this.range.sy = y;
+                    } else if (note) {
+                        this.addHistory();
+                        // 伸縮音符
+                        let dx = rx - note.x * W;
+                        if (dx > note.l * W - this.resizeBuffer) this.resizing = { dir: 'right', note };
+                        else if (dx < this.resizeBuffer) this.resizing = { dir: 'left', note };
+                        // 選取音符
+                        if (!this.activeNotes.includes(note)) {
+                            this.clearSelection();
+                            note.a = true;
+                            this.activeNotes = [note];
+                        }
+                        // 移動音符
+                        if (!this.resizing) {
+                            this.dragging = note;
+                            this.triggerSelection(false);
+                        }
+                    } else {
+                        // 新增音符
+                        this.clearSelection();
+                        this.addHistory();
+                        for (let oy of this.chords[this.chordType]) {
+                            let newNote = new Note({
+                                a: true,
+                                x,
+                                y: y - oy,
+                                l: this.lastNote.l,
+                                v: this.lastNote.v,
+                            });
+                            this.dragging = newNote;
+                            this.notes.push(newNote);
+                            this.activeNotes.push(newNote);
+                        }
+                        this.triggerSelection(false);
+                    }
+                } else if (e.button == 2) {
+                    // 刪除音符
+                    this.clearSelection();
+                    this.deleting = true;
+                    if (note) {
+                        this.addHistory();
+                        let idx = this.notes.findIndex((n) => n == note);
+                        this.notes.splice(idx, 1);
+                    }
+                }
+            },
+            handleMove(e) {
+                if (this.velociting) return this.setVelocity(e);
+                let { x, y, rx, ry, cx, cy, note } = this.getGrid(e.clientX, e.clientY);
+                if (this.ticking) {
+                    // 調整刻度
+                    this.playX = this.lastX = this.floatX = x;
+                    // this.cursor = 'col-resize'
+                } else if (this.ranging) {
+                    // 選取範圍
+                    this.range.ex = x;
+                    this.range.ey = y;
+                } else if (this.resizing) {
+                    // 伸縮音符
+                    let { dir, note } = this.resizing;
+                    let dx = x - note.x;
+                    let dl = x - note.x - note.l + 1;
+                    if (dir == 'left' && this.activeNotes.every((n) => n.x + dx < n.end)) {
+                        for (let n of this.activeNotes) {
+                            n.l -= dx;
+                            n.x += dx;
+                        }
+                    } else if (dir == 'right' && this.activeNotes.every((n) => n.l + dl > 0)) {
+                        for (let n of this.activeNotes) n.l += dl;
+                    }
+                } else if (this.dragging) {
+                    // 移動音符
+                    let dx = x - this.mouse.x;
+                    let dy = y - this.mouse.y;
+                    if (this.checkMovable(dx, dy)) {
+                        for (let note of this.activeNotes) {
+                            note.x += dx;
+                            note.y += dy;
+                            if (dy != 0) this.triggerRelease(note);
+                        }
+                    }
+                } else if (note) {
+                    // detect if in resize zone, and set cursor style
+                    let { W } = this.grid;
+                    let dx = rx - note.x * W;
+                    if (this.deleting) {
+                        this.addHistory();
+                        let idx = this.notes.findIndex((n) => n == note);
+                        this.notes.splice(idx, 1);
+                    } else if (this.velociting) {
+                        this.cursor = this.ltr ? 'ns-resize' : 'ew-resize';
+                    } else if (dx < this.resizeBuffer || dx > note.l * W - this.resizeBuffer || this.resizing)
+                        this.cursor = this.ltr ? 'ew-resize' : 'ns-resize';
+                    else this.cursor = 'auto';
+                } else if (this.mouse.button == 1) {
+                    // 滑鼠中鍵移動位置
+                    let dx = e.clientX - this.mouse.clientX;
+                    let dy = e.clientY - this.mouse.clientY;
+                    this.scrollLeft -= this.ltr ? dx : -dy;
+                    this.scrollTop -= this.ltr ? dy : dx;
+                    this.cursor = 'grabbing';
+                } else this.cursor = 'auto';
+                this.mouse.x = x;
+                this.mouse.y = y;
+                this.mouse.clientX = e.clientX;
+                this.mouse.clientY = e.clientY;
+            },
+            handleEnd(e) {
+                if (this.recording) {
+                    for (let note in this.activeNotes) this.pianoEnd(107 - note.y);
+                } else if (this.ranging) {
+                    // 將範圍內的音符選取起來
+                    let { sx, sy, ex, ey } = this.range;
+                    if (ex < sx) sx = [ex, (ex = sx)][0];
+                    if (ey < sy) sy = [ey, (ey = sy)][0];
+                    this.activeNotes = this.notes.filter((n) => n.x <= ex && sx < n.end && sy <= n.y && n.y <= ey);
+                    this.activeNotes.map((n) => (n.a = true));
+                } else if (this.resizing) {
+                    this.lastNote = new Note(this.resizing.note);
+                } else if (this.activeNotes.length) {
+                    // 停止預覽播放
+                    this.lastNote = new Note(this.activeNotes[0]);
+                    this.dragging = false;
+                    this.activeNotes.map((n) => this.triggerRelease(n));
+                } else {
+                    for (let note in this.triggering) this.pianoEnd(107 - note.y);
+                }
+                this.ticking = this.deleting = this.velociting = this.ranging = this.resizing = false;
+                this.mouse.button = -1;
+            },
+            // commands
+            playLoop() {
+                let { W, beat } = this.grid;
+                if (this.freezeScroll) this.scrollLeft = this.floatX * this.grid.W;
+                // 算出時間插值
+                let interpolate = Math.min(this.beatSec * 30); //FPS
+                clearTimeout(this.playTimeout);
+                // 到了最尾端自動停止
+                if (this.playX > this.endX) return this.stop();
+                // 用setTimeout異步回call
+                else
+                    this.playTimeout = setTimeout(() => {
+                        this.floatX += 1 / interpolate;
+                        this.playLoop();
+                    }, (1000 * this.beatSec) / interpolate);
+                // 時間插值跨越整數
+                if (Math.floor(this.floatX) - this.playX >= 1) this.playX++;
+                //非跨越整數，略過下列執行
+                else return;
+                // time consuming process
+                if (this.recording) {
+                    for (let note of this.activeNotes) note.l = this.playX - note.x;
+                    this.$emit('mic-sample');
+                } else {
+                    for (let track of this.tracks) {
+                        for (let note of track.notes) {
+                            if (note.x == this.playX) {
+                                let duration = note.l * this.beatSec;
+                                track.instrument.triggerAttackRelease(note.f, duration, undefined, note.v / 127);
+                                note.p = true;
+                                this.triggering.push(note);
+                            }
+                        }
+                        for (let note of this.triggering) {
+                            if (note.p && note.x + note.l < this.playX) {
+                                note.p = false;
+                                this.triggering = this.triggering.filter((n) => n != note);
+                            }
+                        }
+                    }
+                }
+                // emit metronome
+                if (this.metronome && this.playX % beat == 0) this.$emit('metronome', this.playX % (beat * 4) == 0 ? 'F5' : 'F4');
+            },
+            record() {
+                for (let note of this.activeNotes) note.a = false;
+                if (this.metronome) this.playX = this.lastX - 16;
+                this.activeNotes = [];
+                this.recording = true;
+                this.play();
+            },
+            play() {
+                if (this.playing) return;
+                this.playing = true;
+                if (this.freezeScroll) this.playX = this.floatX = this.scrollBound.minX;
+                this.playLoop();
+            },
+            stop() {
+                this.playing = this.recording = false;
+                this.floatX = this.playX = this.lastX;
+                clearTimeout(this.playTimeout);
+                for (let note of this.triggering) this.triggerRelease(note);
+            },
+            randomVelocity() {
+                this.notes.map((n) => (n.v = Math.round(Math.random() * 100 + 27)));
+            },
+            async toggleDisplay() {
+                // 切換視角
+                this.ltr = !this.ltr;
+                this.grid.H = 20;
+                await this.$nextTick();
+            },
+            triggerAttack(note) {
+                this.instrument.triggerAttack(note.f, undefined, note.v / 127);
+                this.triggering.push(note);
+            },
+            triggerRelease(note) {
+                this.instrument.triggerRelease(note.f);
+                this.triggering = this.triggering.filter((n) => n != note);
+            },
+            triggerSelection(shouldRelease = true) {
+                if (!this.activeNotes.length) return;
+                let firstNote = this.activeNotes[0];
+                if (!this.activeNotes.every((n) => n.x == firstNote.x)) return;
+                for (let note of this.activeNotes) {
+                    if (shouldRelease) this.instrument.triggerAttackRelease(note.f, '8n', undefined, note.v / 127);
+                    else this.triggerAttack(note);
+                }
+            },
+            clearSelection() {
+                this.activeNotes.map((n) => (n.a = false));
+                this.activeNotes = [];
+            },
+            pianoStart(midi, v = 60) {
+                let newNote = new Note({
+                    a: true,
+                    x: this.playX - 1,
+                    y: 107 - midi,
+                    l: 1,
+                    v: v,
+                    p: false, //playing
+                });
+                this.activeNotes.push(newNote);
+                if (this.recording) this.notes.push(newNote);
+                this.triggerAttack(newNote);
+            },
+            pianoEnd(midi) {
+                if (this.recording) {
+                    let idx = this.activeNotes.findIndex((n) => n.y == 107 - midi);
+                    if (idx == -1) return;
+                    let note = this.activeNotes[idx];
+                    note.a = false;
+                    this.triggerRelease(note);
+                    this.activeNotes.splice(idx, 1);
+                } else {
+                    let idx = this.triggering.findIndex((n) => n.y == 107 - midi);
+                    if (idx == -1) return;
+                    let note = this.triggering[idx];
+                    this.triggerRelease(note);
+                }
+            },
+            copyNotes() {
+                this.clipboard = this.activeNotes.map((n) => new Note(n));
+            },
+            pasteNotes() {
+                this.addHistory();
+                let minX = Math.min(...this.clipboard.map((n) => n.x));
+                this.activeNotes.map((n) => (n.a = false));
+                let cloned = this.clipboard.map((n) => new Note({ ...n, x: n.x + this.mouse.x - minX }));
+                this.notes.push(...cloned);
+                this.activeNotes = cloned;
+            },
+            deleteNotes() {
+                this.addHistory();
+                let filterNotes = this.notes.filter((n) => !this.activeNotes.includes(n));
+                this.$emit('notes', filterNotes);
+                this.activeNotes = [];
+            },
+            addHistory(msg = '') {
+                this.histories[this.historyIdx] = {
+                    msg,
+                    notes: this.notes.map((note) => new Note(note)),
+                };
+                this.historyIdx++;
+                this.histories = this.histories.slice(0, this.historyIdx);
+            },
+            traceHistory(offset) {
+                if (offset < 0 && !this.histories[this.historyIdx]) {
+                    this.addHistory();
+                    this.historyIdx--;
+                }
+                this.historyIdx = this.minmax(this.historyIdx + offset, 0, this.histories.length - 1);
+                let { notes } = this.histories[this.historyIdx];
+                this.$emit('notes', notes);
+                this.activeNotes = notes.filter((n) => n.a);
+            },
+            // key-events
+            handleKeydown(e) {
+                switch (e.key.toUpperCase()) {
+                    case 'SHIFT': this.shiftKey = true; break;
+                    case 'CONTROL': this.ctrlKey = true; break;
+                    case ' ':
+                        e.preventDefault();
+                        if (this.playing) this.stop();
+                        else this.play();
+                        break;
+                    case 'A': if (e.ctrlKey) { this.activeNotes = this.notes; this.activeNotes.map((n) => (n.a = true)); } break;
+                    case 'X': if (e.ctrlKey) { this.copyNotes(); this.deleteNotes(); } break;
+                    case 'C': if (e.ctrlKey) this.copyNotes(); break;
+                    case 'V': if (e.ctrlKey) this.pasteNotes(); break;
+                    case 'F2': this.freezeScroll = !this.freezeScroll; break;
+                    case 'DELETE': this.deleteNotes(); break;
+                    case 'BACKSPACE': this.deleteNotes(); break;
+                    case 'ARROWLEFT':
+                        if (this.activeNotes.length && this.checkMovable(1, 0)) {
+                            if (e.shiftKey) this.activeNotes.map((n) => n.l--);
+                            else this.activeNotes.map((n) => n.x--);
+                        } else if (!this.playing) {
+                            if (this.ltr) this.scrollLeft -= this.grid.W
+                            else this.scrollTop -= this.grid.H
+                        }
+                        break;
+                    case 'ARROWRIGHT':
+                        if (this.activeNotes.length && this.checkMovable(1, 0)) {
+                            if (e.shiftKey) this.activeNotes.map((n) => n.l++);
+                            else this.activeNotes.map((n) => n.x++);
+                        } else if (!this.playing) {
+                            if (this.ltr) this.scrollLeft += this.grid.W
+                            else this.scrollTop += this.grid.H
+                        }
+                        break;
+                    case 'ARROWDOWN':
+                        if (this.activeNotes.length) {
+                            if (e.shiftKey) {
+                                let minY = Math.min(...this.activeNotes.map((n) => n.y));
+                                let i = this.activeNotes.findIndex((n) => n.y == minY);
+                                this.activeNotes[i].y += 12;
+                                this.triggerSelection();
+                            } else this.activeNotes.map((n) => n.y++);
+                        } else if (!this.playing) {
+                            if (this.ltr) this.scrollTop += this.grid.H
+                            else this.scrollLeft -= this.grid.W
+                        }
+                        break;
+                    case 'ARROWUP':
+                        if (this.activeNotes.length) {
+                            if (e.shiftKey) {
+                                let maxY = Math.max(...this.activeNotes.map((n) => n.y));
+                                let i = this.activeNotes.findIndex((n) => n.y == maxY);
+                                this.activeNotes[i].y -= 12;
+                                this.triggerSelection();
+                            } else this.activeNotes.map((n) => n.y--);
+                        } else if (!this.playing) {
+                            if (this.ltr) this.scrollTop -= this.grid.H
+                            else this.scrollLeft += this.grid.W
+                        }
+                        break;
+                    case 'Z':
+                        if (e.ctrlKey) {
+                            if (e.shiftKey) this.traceHistory(1);
+                            else this.traceHistory(-1);
+                        }
+                        break;
+                    default: break;
+                }
+            },
+            handleKeyup(e) {
+                switch (e.key.toUpperCase()) {
+                    case 'SHIFT': this.shiftKey = false; break;
+                    case 'CONTROL': this.ctrlKey = false; break;
+                    default: break;
+                }
+            },
+            draw() {
+                const canvas = this.$refs.canvas;
+                const ctx = canvas.getContext('2d');
+                let { width, height } = canvas;
+                let { W, H, beat, tickH, velH, velSize, sliderSize } = this.grid;
+                // 繪製底部網格
+                ctx.fillStyle = '#29373F'
+                ctx.fillRect(0, 0, width, height);
+                const res = (m, n) => ((m % n) + n) % n;
+                let iy = Math.floor((this.ltr ? 1 : -1) * this.scrollTop / H);
+                let jy = (this.ltr ? height : width) / H;
+                let oy = res(this.scrollTop, H);
+                for (let i = -1; i <= jy + 1; i++) {
+                    let isBlack = [1, 3, 5, 8, 10].includes(res(iy + i, 12))
+                    ctx.fillStyle = isBlack ? '#394B56' : '#42545F';
+                    if (this.ltr) ctx.fillRect(0, i * H - oy, width, H - 2);
+                    else ctx.fillRect(width - i * H - oy, 0, H - 2, height);
+                }
+                let ix = Math.floor(this.scrollLeft / W);
+                let jx = (this.ltr ? width : height) / W;
+                let ox = res(this.scrollLeft, W);
+                for (let i = -1; i <= jx + 1; i++) {
+                    ctx.fillStyle = res(ix + i, 8) ? '#42545F' : '#29373F';
+                    if (this.ltr) ctx.fillRect(i * W - ox, 0, 1, height);
+                    else ctx.fillRect(0, height - i * W + ox, width, 1);
+                }
+                // 繪製音符
+                for (let track of this.scrollerTracks) {
+                    for (let note of track.notes) {
+                        ctx.fillStyle = note.a ? this.activeColor : `rgb(${track.rgb.join(',')})`;
+                        ctx.globalAlpha = (note.v / 127) * 0.5 + 0.5;
+                        let x = note.x * W - this.scrollLeft
+                        if (this.ltr) ctx.fillRect(x, note.y * H - this.scrollTop, note.l * W - 2, H);
+                        else ctx.fillRect(width - note.y * H - this.scrollTop - H, height - x - note.l * W + 2, H, note.l * W - 2);
+                    }
+                }
+                ctx.globalAlpha = 1;
+                // 繪製時間線
+                ctx.fillStyle = 'orange'
+                if (this.ltr) ctx.fillRect(W * this.floatX - this.scrollLeft, 0, 2, height)
+                else ctx.fillRect(0, height - W * this.floatX + this.scrollLeft, width, 2)
+                // 繪製刻度數字
+                ctx.fillStyle = '#343a40'
+                if (this.ltr) ctx.fillRect(0, 0, width, tickH)
+                else ctx.fillRect(0, 0, tickH, height)
+                ctx.font = '16pt monospace'
+                ctx.textAlign = 'left'
+                let { minX, maxX } = this.scrollBound;
+                minX = Math.floor(minX / beat)
+                maxX = Math.ceil(maxX / beat)
+                for (let i = minX; i <= maxX; i++) {
+                    ctx.fillStyle = i % 4 ? 'white' : 'gold'
+                    let x = i * W * beat - this.scrollLeft
+                    if (this.ltr) ctx.fillText(i, x, 20)
+                    else ctx.fillText(i, 0, height - x)
+                }
+                // 繪製選取範圍框
+                if (this.ranging) {
+                    let { sx, sy, ex, ey } = this.range;
+                    if (ex < sx) sx = [ex, (ex = sx)][0];
+                    if (ey < sy) sy = [ey, (ey = sy)][0];
+                    let rw = (ex - sx) * W
+                    let rh = (ey - sy) * H
+                    ctx.strokeStyle = 'dodgerblue'
+                    let x = sx * W - this.scrollLeft
+                    let y = sy * H - this.scrollTop
+                    if (this.ltr) ctx.strokeRect(x, y, rw, rh)
+                    else ctx.strokeRect(width - y - rh, height - x - rw, rh, rw)
+                }
+                // 繪製力度框及力度條
+                ctx.fillStyle = '#343a40'
+                if (this.ltr) ctx.fillRect(0, height - velH, width, velH)
+                else ctx.fillRect(width - velH, 0, velH, height)
+                for (let note of this.notes) {
+                    ctx.fillStyle = note.a ? this.activeColor : `dodgerblue`;
+                    ctx.globalAlpha = (note.v / 127) * 0.5 + 0.5;
+                    let vh = (note.v / 127) * (velH - velSize) + velSize
+                    let x = note.x * W - this.scrollLeft
+                    if (this.ltr) ctx.fillRect(x, height - vh, note.l * W, velSize);
+                    else ctx.fillRect(width - vh, height - x - note.l * W, velSize, note.l * W);
+                }
+                ctx.globalAlpha = 1;
+                requestAnimationFrame(this.draw);
+            },
+        },
+        computed: {
+            notes() {
+                let { notes } = this.tracks[this.trackIndex] || {};
+                return notes || [];
+            },
+            instrument() {
+                let { instrument } = this.tracks[this.trackIndex] || {};
+                return instrument || {};
+            },
+            scrollBound() {
+                let { clientWidth, clientHeight } = this.$refs['scroller'] || {};
+                let clientSize = this.ltr ? clientWidth : clientHeight;
+                let { W } = this.grid;
+                let minX = Math.floor(this.scrollLeft / W);
+                let maxX = Math.ceil((this.scrollLeft + clientSize) / W);
+                return { minX, maxX, clientSize };
+            },
+            scrollerTracks() {
+                let { minX, maxX } = this.scrollBound;
+                return this.tracks.map((track) => ({
+                    ...track,
+                    notes: track.notes.filter((n) => minX <= n.end && n.x <= maxX),
+                }));
+            },
+            beatSec() {
+                let { beat } = this.grid;
+                let sec = 60 / this.bpm / beat;
+                let floatPoint = 1e3;
+                return Math.round(sec * floatPoint) / floatPoint;
+            },
+            endX() {
+                let { beat } = this.grid;
+                let endX = Math.max(...this.tracks.flatMap((track) => track.notes.map((n) => n.end)));
+                endX = Math.ceil(endX / beat) * beat + 1;
+                return endX;
+            },
+            scrollSize() {
+                let { clientSize } = this.scrollBound;
+                let { W } = this.grid;
+                return clientSize + Math.max(this.scrollLeft, Math.ceil(this.endX * W));
+            },
+            pianoGrids() {
+                let { H, tickH, velH, whiteKey, blackKey, octave } = this.grid;
+                let blacks = [1, 3, 5, 8, 10];
+                let top = 0;
+                let len = octave * 12;
+                return Array.from(Array(len).keys(), (i) => {
+                    let isBlack = blacks.includes(i % 12);
+                    let height = isBlack ? H : i % 12 < 7 ? (H * 7) / 4 : (H * 5) / 3;
+                    if (i > 0 && !isBlack) top += height;
+                    let isTriggered = this.triggering.some((n) => n.y == i);
+                    return this.ltr
+                        ? {
+                            class: isTriggered ? 'bg-warning' : isBlack ? 'bg-dark' : 'bg-light',
+                            style: {
+                                width: (isBlack ? blackKey : whiteKey) + 'px',
+                                top: (isBlack ? top + H : top) - this.scrollTop - tickH + 'px',
+                                left: 0,
+                                zIndex: isBlack ? 666 : 66,
+                                boxShadow: isBlack ? '2px 0 white' : '0 -2px black',
+                                height: height + 'px',
+                                lineHeight: height + 'px',
+                                textAlign: isBlack ? 'left' : 'right',
+                                padding: '0px 4px',
+                            },
+                            content: isBlack ? '' : this.grid2label(i),
+                        }
+                        : {
+                            class: isTriggered ? 'bg-warning' : isBlack ? 'bg-dark' : 'bg-light',
+                            style: {
+                                height: (isBlack ? blackKey + 10 : whiteKey) + 'px',
+                                right: (isBlack ? H * i : top) + this.scrollTop - velH + 'px',
+                                top: 0,
+                                zIndex: isBlack ? 666 : 66,
+                                boxShadow: isBlack ? '' : '2px 0 black',
+                                width: height + 'px',
+                            },
+                            content: '',
+                        };
+                });
+            },
+        },
+        mounted() {
+            this.addHistory('開啟專案');
+            const canvas = this.$refs.canvas;
+            const resizeObserver = new ResizeObserver((entries) => {
+                let { width, height } = entries[0].contentRect;
+                Object.assign(canvas, { width, height });
+            });
+            resizeObserver.observe(canvas);
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+            this.draw();
+            this.ltr = true; // 觸發scrollerTracks
+            this.events = {
+                mousemove: (e) => this.handleMove(e),
+                mouseup: (e) => this.handleEnd(e),
+                mouseleave: (e) => this.handleEnd(e),
+                keydown: (e) => this.handleKeydown(e),
+                keyup: (e) => this.handleKeyup(e),
+            }
+            for (let name in this.events) window.addEventListener(name, this.events[name]);
+        },
+        beforeDestroy() {
+            for (let name in this.events) window.removeEventListener(name, this.events[name]);
+        },
+    });
+    var vm = new Vue({
+        el: '#app',
+        data: () => ({
+            events: {}, bpm: 132, piano: Tone.Sampler, drum: Tone.Sampler, synth: Tone.PolySynth, metronome: Tone.Sampler,
+            PR: { histories: [] }, trackIndex: 0, tracks: [], showKeyboard: false,
+            tempoDict: { Largo: 40, Adagio: 66, Andante: 76, Moderato: 108, Allegro: 120, JoJo: 131, Presto: 168, Prestissimo: 200, },
+            processor: ['Arpeggio', 'Legato', 'Staccato', 'Ornaments', 'Vibrato', 'Pizzicato', 'Glissando'],
+            drumUrls: {
+                'A2': 'A2.mp3',
+                'A#2': 'As2.mp3',
+                'B1': 'C2.mp3',
+                'B2': 'B2.mp3',
+                'C2': 'C2.mp3',
+                'C4': 'C4.mp3',
+                'C#2': 'D2.mp3',
+                'C#3': 'Cs3.mp3',
+                'C#4': 'Cs4.mp3',
+                'D2': 'D2.mp3',
+                'D4': 'D4.mp3',
+                'D#2': 'Ds2.mp3',
+                'D#3': 'Ds3.mp3',
+                'D#4': 'Ds4.mp3',
+                'E2': 'E2.mp3',
+                'E4': 'E4.mp3',
+                'F#2': 'Gs2.mp3',
+                'F3': 'F3.mp3',
+                'G2': 'G2.mp3',
+                'G3': 'G3.mp3',
+                'G#2': 'Gs2.mp3',
+            },
+        }),
+        methods: {
+            importMIDI(file) {
+                let reader = new FileReader()
+                reader.readAsArrayBuffer(file)
+                reader.onload = () => this.decodeMIDI(reader.result)
+            },
+            async decodeMIDI(buffer) {
+                const midi = await new Midi(buffer)
+                let { header, tracks } = midi
+                // console.log(midi)
+                this.bpm = Math.round(header.tempos[0].bpm)
+                const beatSec = 60 / this.bpm / 8
+                tracks = tracks.map(track => {
+                    let { notes, instrument } = track
+                    let { number, family, name, percussion } = instrument
+                    return {
+                        family,
+                        notes: notes.map(note => new Note({
+                            x: Math.round(note.time / beatSec),
+                            y: 8 * 12 - note.midi + 11, // C0 = 12
+                            l: Math.ceil(note.duration / beatSec),
+                            v: note.velocity * 127,
+                        })),
+                    }
+                })
+                this.resetTracks(tracks)
+            },
+            resetTracks(tracks) {
+                for (let track of this.tracks) track.notes = []
+                let firstPiano = false
+                for (let track of tracks) {
+                    // console.log(track)
+                    if (track.family == 'piano') {
+                        if (firstPiano) this.tracks[1].notes.push(...track.notes)
+                        else this.tracks[0].notes.push(...track.notes)
+                        firstPiano = true
+                    }
+                    if (track.family == 'drums') this.tracks[3].notes.push(...track.notes)
+                }
+            },
+            encodeMIDI(bpm, notes) {
+                let midi = new Midi()
+                midi.header.setTempo(bpm)
+                const beatSec = 60 / bpm / 4
+                let track = midi.addTrack()
+                for (let note of notes)
+                    track.addNote({
+                        midi: 8 * 12 - note.y + 11,
+                        time: note.x * beatSec,
+                        duration: note.l * beatSec,
+                        velocity: note.v / 127
+                    })
+                // 下載
+                const blob = new Blob([midi.toArray()], { type: 'audio/midi' })
+                this.download(URL.createObjectURL(blob), 'export.midi')
+            },
+            download(href = '', download = '') {
+                const link = document.createElement('a')
+                document.body.appendChild(link)
+                Object.assign(link, { href, download, style: { display: 'none' } })
+                link.click()
+                document.body.removeChild(link)
+            },
+            async requestMIDIAccess() {
+                if (navigator.requestMIDIAccess) {
+                    let midiAccess = await navigator.requestMIDIAccess()
+                    let inputs = midiAccess.inputs
+                    let outputs = midiAccess.outputs
+                    for (let input of inputs.values()) {
+                        input.onmidimessage = this.getMIDIMessage
+                    }
+                }
+            },
+            getMIDIMessage(msg) {
+                let [command, midi, velocity] = msg.data
+                switch (command) {
+                    case 144: //note on
+                        this.PR.pianoStart({ midi, velocity })
+                        break
+                    case 128: //note off
+                        this.PR.pianoEnd({ midi, velocity })
+                        break;
+                }
+            },
+            getPianoUrls() {
+                // A0v1~A7v16, C1v1~C8v16 Ds1v7~Ds7v16 Fs1v1~Fs7v16
+                const octs = { A: [0, 7], C: [1, 8], Ds: [1, 7], Fs: [1, 7] }
+                let entries = []
+                for (let velocity of [5, 10, 15]) {
+                    for (let note in octs) {
+                        let [min, max] = octs[note]
+                        for (let i = min; i <= max; i++) {
+                            let key = `${note}${i}v${velocity}`
+                            let entry = [key.replace('s', '#'), `${key}.mp3`]
+                            entries.push(entry)
+                        }
+                    }
+                }
+                return Object.fromEntries(entries)
+            },
+        },
+        computed: {
+            tempoName() {
+                let keys = Object.keys(this.tempoDict)
+                let i = keys.findIndex(k => this.tempoDict[k] > this.bpm)
+                return keys[i == 0 ? 0 : i == -1 ? keys.length - 1 : i - 1]
+            },
+        },
+        created() {
+            this.synth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: 'square8' }
+            }).toDestination()
+            this.piano = new Tone.Sampler({
+                urls: this.getPianoUrls(),
+                baseUrl: 'piano-samples/',
+                release: 1,
+            }).toDestination()
+            this.drum = new Tone.Sampler({
+                urls: this.drumUrls,
+                baseUrl: 'drum/acoustic/',
+                release: 1
+            }).toDestination()
+            this.tracks = [
+                { name: 'piano1', rgb: [196, 250, 207], instrument: this.piano, notes: [], histories: [], historyIdx: 0 },
+                { name: 'piano2', rgb: [206, 196, 250], instrument: this.piano, notes: [], histories: [], historyIdx: 0 },
+                { name: 'synth', rgb: [250, 250, 196], instrument: this.synth, notes: [], histories: [], historyIdx: 0 },
+                { name: 'drum', rgb: [196, 238, 250], instrument: this.drum, notes: [], histories: [], historyIdx: 0 },
+            ]
+            this.metronome = new Tone.Sampler({
+                urls: { 'F5': 'metronome.mp3' },
+                baseUrl: 'drum/',
+                release: 1,
+            }).toDestination()
+        },
+        mounted() {
+            this.PR = this.$refs['pianoRoll']
+        },
+    })
+</script>
+
+</html>

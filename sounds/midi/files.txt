@@ -1,0 +1,57 @@
+./Animenz/aLIEz.mid
+./Animenz/Evangelion_-_A_Cruel_Angels_Thesis.mid
+./Animenz/Ichiban_no_takaramono.mid
+./Animenz/Kimi_wo_Nosete.mid
+./Animenz/Last_Stardust.mid
+./Animenz/Nier_Automata_OST_City_Ruins.mid
+./Animenz/No_Game_No_Life.mid
+./Animenz/Owari_no_Sekai_Kara.mid
+./Animenz/Satori_Maiden.mid
+./Animenz/SwordlandSword_Art_Online_Ost.mid
+./Animenz/Unravel.mid
+./cprato/3LAU feat. Bright Lights - How You Love Me.mid
+./cprato/Above & Beyond - Tri-state.mid
+./cprato/Above & Beyond feat. Alex Vargas - Blue Sky Action.mid
+./cprato/Alan Walker - Alone.mid
+./cprato/Alan Walker - Faded.mid
+./cprato/Alan Walker - Sing Me To Sleep.mid
+./cprato/Calvin Harris - Blame.mid
+./cprato/Calvin Harris - My Way.mid
+./cprato/Clairo - Bags.mid
+./cprato/deadmau5 - Strobe.mid
+./cprato/Ed Sheeran - Shape of You.mid
+./cprato/Lil Nas X - Old Town Road.mid
+./cprato/Luis Fonsi ft. Daddy Yankee - Despacito.mid
+./cprato/Marshmello - Alone.mid
+./cprato/Steve Angello - Wasted Love.mid
+./cprato/Tones And I - Dance Monkey.mid
+./cprato/Vicetone & Tony Igy - Astronomia.mid
+./cprato/Zeds Dead x NGHTMRE - Frontlines.mid
+./Epic/A_Comme_Amour.mid
+./Epic/Chopin_Spring_Waltz.mid
+./Epic/Flower_Dance_DJ_Okawari_Piano.mid
+./Epic/Jay_Chou_-_Time_Travel_Theme.mid
+./Epic/Nyan-cat.mid
+./Epic/The_Entertainer_-_Scott_Joplin_-_1902.mid
+./Epic/Undertale_-_Megalovania_Piano_ver._3.mid
+./Epic/Victory_Piano_Solo_-_Two_Steps_From_Hell.mid
+./Eve/Eve_-_Dramaturgy.mid
+./Eve/Eve_-_Inochi_No_Tabekata.mid
+./Eve/Eve_-_Kaikai_Kitan.mid
+./Eve/Eve_-_Outsider.mid
+./Eve/Eve_-_Raison_Detre.mid
+./Eve/Eve_-_蒼のワルツ.mid
+./Jojo/Giornos_Theme_vento_doro.mid
+./Lisa/Lisa_-_ADAMAS.mid
+./Lisa/Lisa_-_Catch_the_Moment.mid
+./Lisa/Lisa_-_Crossing_Field.mid
+./Lisa/Lisa_-_Gurenge.mid
+./Lisa/Lisa_-_Homura.mid
+./Lisa/Lisa_-_Rising_Hope_piano.mid
+./Yoasobi/Yoasobi_-_ハルジオン.mid
+./Yoasobi/Yoasobi_-_夜に駆ける.mid
+./Zutomayo/Zutomayo_-_Byoushin_wo_Kamu.mid
+./Zutomayo/Zutomayo_-_Cracker_Behind_the_Brain.mid
+./Zutomayo/Zutomayo_-_Haze_Haseru_Hateru_Made.mid
+./Zutomayo/Zutomayo_-_Kan_Saete_Kuyashiwa.mid
+./Zutomayo/Zutomayo_-_Study_Me.mid

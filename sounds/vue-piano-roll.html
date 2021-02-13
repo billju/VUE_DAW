@@ -6,6 +6,16 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vue-piano-roll</title>
+    <meta property="og:url" content="https://chuboy.dev/midi" />
+    <meta property="og:locale" content="zh_TW" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="鋼琴卷軸" />
+    <meta property="og:description" content="結合Vue.js與Tone.js的MIDI編輯軟體" />
+    <meta property="og:image" content="og.png" />
+    <meta property="og:image:alt" content="練習鋼琴與編輯MIDI" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="720" />
+    <meta property="og:image:height" content="480" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" />
     <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
@@ -38,6 +48,7 @@
                 <button class="btn btn-success" title="播放" v-else @click="PR.play()">
                     <i class="fa fa-play"></i>
                 </button>
+                <Pitch ref="pitch" @noteOn="PR.pianoStart($event)" @noteOff="PR.pianoEnd($event)"></Pitch>
                 <button class="btn btn-success" v-if="PR.metronome" @click="PR.metronome=false" title="已開啟節拍器">
                     <i class="fa fa-headphones"></i>
                 </button>
@@ -46,17 +57,21 @@
                 </button>
                 <button class="btn" title="鎖定橫向卷軸(F2)" :class="PR.freezeScroll?'btn-success':'btn-secondary'"
                     @click="PR.freezeScroll=!PR.freezeScroll">
-                    <i class="fa fa-fast-forward"></i>
+                    <i class="fa" :class="PR.freezeScroll?'fa-lock':'fa-unlock'"></i>
                 </button>
-                <button class="btn btn-secondary" @click="PR.randomVelocity()">random velocity</button>
+                <button class="btn btn-secondary" @click="PR.randomVelocity()">隨機力度</button>
                 <button class="btn" title="切換螢幕鍵盤" :class="showKeyboard?'btn-success':'btn-secondary'"
                     @click="showKeyboard=!showKeyboard">
-                    <i class="fa fa-circle-notch"> </i>
+                    <i class="fa fa-keyboard"> </i>
                 </button>
-                <button class="btn btn-sm btn-success" @click="$refs['file'].click()">import
+                <button class="btn" title="開啟MIDI檔" :class="showMidiList?'btn-success':'btn-secondary'"
+                    @click="showMidiList=!showMidiList">
+                    <i class="fa fa-folder-open"></i>
+                </button>
+                <button class="btn btn-sm btn-success" title="匯入MIDI檔" @click="$refs['file'].click()">匯入
                     <input class="d-none" ref="file" type="file" @change="importMIDI($event.target.files[0])" />
                 </button>
-                <button class="btn btn-danger" @click="encodeMIDI(bpm,PR.notes)">export</button>
+                <button class="btn btn-danger" title="匯出MIDI檔" @click="encodeMIDI(bpm,PR.notes)">匯出</button>
                 <button class="btn btn-secondary" v-for="track,ti in tracks" :key="track.name"
                     :class="ti==trackIndex?'active':''" @click="trackIndex=ti">{{track.name}}</button>
                 <Effector v-if="tracks.length" :key="trackIndex" :source="tracks[trackIndex].instrument" />
@@ -67,7 +82,12 @@
             @notes="tracks[trackIndex].notes=$event"></PianoRoll>
         <Keyboard v-if="showKeyboard" class="position-fixed shadow-lg"
             style="left:50%;top:50%;transform:translate(-50%,-50%)" @note-on="PR.pianoStart($event.midi)"
-            @note-off="PR.pianoEnd($event.midi)" />
+            @note-off="PR.pianoEnd($event.midi)"></Keyboard>
+        <div v-if="showMidiList" class="position-fixed bg-dark px-2 overflow-auto shadow-lg"
+            style="top:0;right:0;bottom:0;z-index:888">
+            <div role="button" class="btn-dark px-2 py-1 border-bottom" v-for="url in midiUrls" :key="url"
+                @click="fetchMIDI(url);showMidiList=false"><small>{{url}}</small></div>
+        </div>
     </div>
 
 </body>
@@ -82,6 +102,16 @@
 
     .slider:active {
         background: #4dd0e1;
+    }
+
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: #666666;
+        border-radius: 5px;
     }
 </style>
 <script>
@@ -252,9 +282,111 @@
                 window.removeEventListener(name, this.events[name], { passive: false })
         }
     })
+    Vue.component('Pitch', {
+        template: `
+        <div class="btn btn-danger" v-if="stream" @click="stopMedia()" title="已開啟麥克風" >
+            <i class="fa fa-microphone"></i>
+        </div>
+        <div class="btn btn-secondary" v-else @click="getUserMedia()" title="已關閉麥克風" >
+            <i class="fa fa-microphone-slash"></i>
+        </div>`,
+        data: () => ({
+            midiNames: ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
+            buf: new Float32Array(1024), stream: null, movingAvg: [], lastMidi: null,
+            analyser: {}, mediaStreamSource: {}, animationFrame: null,
+            audioContext: new AudioContext(),
+        }),
+        methods: {
+            stopMedia() {
+                this.stream.getTracks().forEach(track => track.stop());
+                this.stream = null;
+                cancelAnimationFrame(this.animationFrame);
+            },
+            getUserMedia() {
+                try {
+                    navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            mandatory: {
+                                googEchoCancellation: false,
+                                googAutoGainControl: false,
+                                googNoiseSuppression: false,
+                                googHighpassFilter: false
+                            },
+                            optional: []
+                        },
+                    }).then(this.gotStream);
+                } catch (e) { alert('無法取得麥克風權限：' + e); }
+            },
+            gotStream(stream) {
+                this.stream = stream;
+                this.mediaStreamSource = this.audioContext.createMediaStreamSource(stream);
+                this.analyser = this.audioContext.createAnalyser();
+                this.analyser.fftSize = 2048;
+                this.mediaStreamSource.connect(this.analyser);
+                this.updatePitch()
+            },
+            sample() {
+                const getAvg = (arr) => arr.reduce((acc, cur) => acc + cur, 0) / arr.length
+                let midi = Math.round(getAvg(this.movingAvg.filter(a => a)))
+                if (midi < 12 || midi > 96) midi = null
+                let noteOff = !midi
+                let noteChange = midi != this.lastMidi
+                if (this.lastMidi && (noteOff || noteChange)) this.$emit('noteOff', this.lastMidi)
+                if (midi && noteChange) this.$emit('noteOn', midi)
+                this.lastMidi = midi
+            },
+            updatePitch() {
+                this.analyser.getFloatTimeDomainData(this.buf)
+                let freq = this.autoCorrelate(this.buf, this.audioContext.sampleRate);
+                if (freq != -1) {
+                    let midi = Math.round(12 * (Math.log(freq / 440) / Math.log(2))) + 69
+                    this.movingAvg.push(midi)
+                    this.movingAvg = this.movingAvg.slice(-1)
+                }
+                this.animationFrame = requestAnimationFrame(this.updatePitch)
+            },
+            autoCorrelate(buf, sampleRate) {
+                var MIN_SAMPLES = 0;
+                var GOOD_ENOUGH_CORRELATION = 0.9;
+                let SIZE = buf.length;
+                let MAX_SAMPLES = Math.floor(SIZE / 2);
+                let best_offset = -1;
+                let best_correlation = 0;
+                let rms = 0;
+                let foundGoodCorrelation = false;
+                let correlations = new Array(MAX_SAMPLES);
+                for (let i = 0; i < SIZE; i++) {
+                    let val = buf[i];
+                    rms += val * val;
+                }
+                rms = Math.sqrt(rms / SIZE);
+                if (rms < 0.1) return -1;
+                let lastCorrelation = 1;
+                for (let offset = MIN_SAMPLES; offset < MAX_SAMPLES; offset++) {
+                    let correlation = 0;
+                    for (let i = 0; i < MAX_SAMPLES; i++) correlation += Math.abs((buf[i]) - (buf[i + offset]));
+                    correlation = 1 - (correlation / MAX_SAMPLES);
+                    correlations[offset] = correlation; // store it, for the tweaking we need to do below.
+                    if ((correlation > GOOD_ENOUGH_CORRELATION) && (correlation > lastCorrelation)) {
+                        foundGoodCorrelation = true;
+                        if (correlation > best_correlation) {
+                            best_correlation = correlation;
+                            best_offset = offset;
+                        }
+                    } else if (foundGoodCorrelation) {
+                        let shift = (correlations[best_offset + 1] - correlations[best_offset - 1]) / correlations[best_offset];
+                        return sampleRate / (best_offset + (8 * shift));
+                    }
+                    lastCorrelation = correlation;
+                }
+                if (best_correlation > 0.01) return sampleRate / best_offset;
+                return -1;
+            },
+        }
+    })
     Vue.component('Scrollbar', {
-        template: `<div class="position-absolute" :style="scrollStyle" @mousedown="handleStart($event.clientX,$event.clientY,$event)">
-            <div class="slider position-absolute" :style="sliderStyle"></div>
+        template: `<div class="position-absolute" :style="scrollStyle">
+            <div class="slider position-absolute" :style="sliderStyle" @mousedown="handleStart($event.clientX,$event.clientY,$event)"></div>
         </div> `,
         data: () => ({
             active: false,
@@ -508,12 +640,10 @@
                 mouseup: e => this.handleMouseup(e),
                 mouseleave: e => this.handleMouseup(e),
             }
-            for (let name in this.events)
-                window.addEventListener(name, this.events[name])
+            for (let name in this.events) window.addEventListener(name, this.events[name], { passive: false })
         },
         beforeDestroy() {
-            for (let name in this.events)
-                window.removeEventListener(name, this.events[name])
+            for (let name in this.events) window.removeEventListener(name, this.events[name], { passive: false })
         },
     })
     Vue.component('Pianoroll', {
@@ -537,7 +667,7 @@
             // width height  八度 小節
             grid: { W: 20, H: 20, octave: 8, beat: 8, tickH: 26, velH: 75, velSize: 4, blackKey: 40, whiteKey: 75, sliderSize: 16 },
             ltr: false, // 畫面顯示方向
-            scrollTop: 0.1,
+            scrollTop: 240.1,
             scrollLeft: 0,
             lastNote: new Note(),
             chordType: 'mono', // 新增音符類型(可快速添加和弦)
@@ -1078,7 +1208,7 @@
                 ctx.fillStyle = '#343a40'
                 if (this.ltr) ctx.fillRect(0, 0, width, tickH)
                 else ctx.fillRect(0, 0, tickH, height)
-                ctx.font = '16pt monospace'
+                ctx.font = '12pt monospace'
                 ctx.textAlign = 'left'
                 let { minX, maxX } = this.scrollBound;
                 minX = Math.floor(minX / beat)
@@ -1232,38 +1362,44 @@
             PR: { histories: [] }, trackIndex: 0, tracks: [], showKeyboard: false,
             tempoDict: { Largo: 40, Adagio: 66, Andante: 76, Moderato: 108, Allegro: 120, JoJo: 131, Presto: 168, Prestissimo: 200, },
             processor: ['Arpeggio', 'Legato', 'Staccato', 'Ornaments', 'Vibrato', 'Pizzicato', 'Glissando'],
+            midiUrls: [], cmd: 'find . -name \*.mid -print > files.txt', showMidiList: true,
             drumUrls: {
-                'A2': 'A2.mp3',
-                'A#2': 'As2.mp3',
-                'B1': 'C2.mp3',
-                'B2': 'B2.mp3',
-                'C2': 'C2.mp3',
-                'C4': 'C4.mp3',
-                'C#2': 'D2.mp3',
-                'C#3': 'Cs3.mp3',
-                'C#4': 'Cs4.mp3',
-                'D2': 'D2.mp3',
-                'D4': 'D4.mp3',
-                'D#2': 'Ds2.mp3',
-                'D#3': 'Ds3.mp3',
-                'D#4': 'Ds4.mp3',
-                'E2': 'E2.mp3',
-                'E4': 'E4.mp3',
-                'F#2': 'Gs2.mp3',
-                'F3': 'F3.mp3',
-                'G2': 'G2.mp3',
-                'G3': 'G3.mp3',
-                'G#2': 'Gs2.mp3',
+                'B1': 'kick.mp3',
+                'C2': 'kick.mp3',
+                'C#2': 'side-stick.mp3',
+                'D2': 'snare.mp3',
+                'D#2': 'clap.mp3',
+                'E2': 'snare-heavy.mp3',
+                'F2': 'low-tom.mp3',
+                'F#2': 'close-hihat.mp3',
+                'G2': 'low-tom.mp3',
+                'G#2': 'close-hihat.mp3',
+                'A2': 'mid-tom.mp3',
+                'A#2': 'open-hihat.mp3',
+                'B2': 'high-tom.mp3',
+                'C3': 'high-tom.mp3',
+                'C#3': 'crash-cymbal.mp3',
+                'D3': 'high-tom.mp3',
+                'D#3': 'ride-cymbal.mp3',
+                'E3': 'splash-cymbal.mp3',
+                'F3': 'ride-bell.mp3',
+                'F#3': 'conga.mp3',
+                'G3': 'splash-cymbal.mp3',
             },
         }),
         methods: {
             importMIDI(file) {
                 let reader = new FileReader()
                 reader.readAsArrayBuffer(file)
-                reader.onload = () => this.decodeMIDI(reader.result)
+                reader.onload = async () => {
+                    let buffer = reader.result
+                    this.decodeMIDI(await new Midi(buffer))
+                }
             },
-            async decodeMIDI(buffer) {
-                const midi = await new Midi(buffer)
+            async fetchMIDI(url) {
+                this.decodeMIDI(await Midi.fromUrl(url))
+            },
+            decodeMIDI(midi) {
                 let { header, tracks } = midi
                 // console.log(midi)
                 this.bpm = Math.round(header.tempos[0].bpm)
@@ -1288,12 +1424,13 @@
                 let firstPiano = false
                 for (let track of tracks) {
                     // console.log(track)
-                    if (track.family == 'piano') {
+                    if (track.family == 'drums') this.tracks[3].notes.push(...track.notes)
+                    else if (track.family == 'bass') this.tracks[2].notes.push(...track.notes)
+                    else {
                         if (firstPiano) this.tracks[1].notes.push(...track.notes)
                         else this.tracks[0].notes.push(...track.notes)
                         firstPiano = true
                     }
-                    if (track.family == 'drums') this.tracks[3].notes.push(...track.notes)
                 }
             },
             encodeMIDI(bpm, notes) {
@@ -1375,14 +1512,14 @@
             }).toDestination()
             this.drum = new Tone.Sampler({
                 urls: this.drumUrls,
-                baseUrl: 'drum/acoustic/',
+                baseUrl: 'drum/',
                 release: 1
             }).toDestination()
             this.tracks = [
-                { name: 'piano1', rgb: [196, 250, 207], instrument: this.piano, notes: [], histories: [], historyIdx: 0 },
-                { name: 'piano2', rgb: [206, 196, 250], instrument: this.piano, notes: [], histories: [], historyIdx: 0 },
-                { name: 'synth', rgb: [250, 250, 196], instrument: this.synth, notes: [], histories: [], historyIdx: 0 },
-                { name: 'drum', rgb: [196, 238, 250], instrument: this.drum, notes: [], histories: [], historyIdx: 0 },
+                { name: '鋼琴(右)', rgb: [196, 250, 207], instrument: this.piano, notes: [], histories: [], historyIdx: 0 },
+                { name: '鋼琴(左)', rgb: [206, 196, 250], instrument: this.piano, notes: [], histories: [], historyIdx: 0 },
+                { name: '合成器', rgb: [250, 250, 196], instrument: this.synth, notes: [], histories: [], historyIdx: 0 },
+                { name: '鼓組', rgb: [196, 238, 250], instrument: this.drum, notes: [], histories: [], historyIdx: 0 },
             ]
             this.metronome = new Tone.Sampler({
                 urls: { 'F5': 'metronome.mp3' },
@@ -1390,8 +1527,10 @@
                 release: 1,
             }).toDestination()
         },
-        mounted() {
+        async mounted() {
             this.PR = this.$refs['pianoRoll']
+            let txt = await fetch('midi/files.txt').then(res => res.text())
+            this.midiUrls = txt.split('\n').map(x => x.replace('./', 'midi/'))
         },
     })
 </script>

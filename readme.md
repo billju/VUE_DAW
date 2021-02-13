@@ -1,6 +1,6 @@
 # Vue DAW
 
-Digital Audio Workstation with Vue
+Digital Audio Workstation with Vue, project link: https://chuboy.dev/midi/
 ### Get started
 1. open your live server (for loading mp3 files)
 2. run `npm run xcopy`&`npm run start`

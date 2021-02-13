@@ -61,30 +61,23 @@ export default {
 			if(midi<12||midi>96) midi = null
 			let noteOff = !midi
 			let noteOn = midi!=this.lastMidi
-			if(this.lastMidi&&(noteOff||noteOn))
-				this.$emit('noteOff', this.lastMidi)
-			if(midi&&noteOn)
-				this.$emit('noteOn', midi)
+			if(this.lastMidi&&(noteOff||noteOn)) this.$emit('noteOff', this.lastMidi)
+			if(midi&&noteOn) this.$emit('noteOn', midi)
 			this.lastMidi = midi
 		},
 		updatePitch(){
 			this.analyser.getFloatTimeDomainData( this.buf )
 			let freq = this.autoCorrelate( this.buf, this.audioContext.sampleRate );
-			let midi = null
-			if (freq == -1) { // vague
-				
-			} else {
-				midi =  this.freq2midi( freq );
-				// let name = this.midiNames[midi%12]+Math.floor(midi/12);
-				// let detune = this.freq2cents( freq, midi );	
+			if (freq != -1) {
+				let midi = Math.round( 12 * (Math.log( freq / 440 )/Math.log(2) ) ) + 69
+				this.movingAvg.push(midi)
+				this.movingAvg = this.movingAvg.slice(-1)
 			}
-			this.movingAvg.push(midi)
-			this.movingAvg = this.movingAvg.slice(-1)
 			this.animationFrame = requestAnimationFrame( this.updatePitch )
 		},
 		autoCorrelate(buf, sampleRate){
-			var MIN_SAMPLES = 0;  // will be initialized when AudioContext is created.
-			var GOOD_ENOUGH_CORRELATION = 0.9; // this is the "bar" for how close a correlation needs to be
+			var MIN_SAMPLES = 0;
+			var GOOD_ENOUGH_CORRELATION = 0.9;
 			let SIZE = buf.length;
 			let MAX_SAMPLES = Math.floor(SIZE/2);
 			let best_offset = -1;
@@ -92,22 +85,16 @@ export default {
 			let rms = 0;
 			let foundGoodCorrelation = false;
 			let correlations = new Array(MAX_SAMPLES);
-
 			for (let i=0;i<SIZE;i++) {
 				let val = buf[i];
 				rms += val*val;
 			}
 			rms = Math.sqrt(rms/SIZE);
-			if (rms<0.1) // not enough signal
-				return -1;
-
+			if (rms<0.1) return -1;
 			let lastCorrelation=1;
 			for (let offset = MIN_SAMPLES; offset < MAX_SAMPLES; offset++) {
 				let correlation = 0;
-
-				for (let i=0; i<MAX_SAMPLES; i++) {
-					correlation += Math.abs((buf[i])-(buf[i+offset]));
-				}
+				for (let i=0; i<MAX_SAMPLES; i++) correlation += Math.abs((buf[i])-(buf[i+offset]));
 				correlation = 1 - (correlation/MAX_SAMPLES);
 				correlations[offset] = correlation; // store it, for the tweaking we need to do below.
 				if ((correlation>GOOD_ENOUGH_CORRELATION) && (correlation > lastCorrelation)) {
@@ -130,10 +117,7 @@ export default {
 				}
 				lastCorrelation = correlation;
 			}
-			if (best_correlation > 0.01) {
-				// console.log("f = " + sampleRate/best_offset + "Hz (rms: " + rms + " confidence: " + best_correlation + ")")
-				return sampleRate/best_offset;
-			}
+			if (best_correlation > 0.01) return sampleRate/best_offset;
 			return -1;
 		},
     },
